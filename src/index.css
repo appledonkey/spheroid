@@ -1,0 +1,191 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  /* Dark wood "rail" around the felt — visible on wide screens where the
+     max-w-6xl game container doesn't fill the viewport. */
+  background: #1c1917;
+}
+
+/* Hide every scrollbar track app-wide. The viewport itself is locked via
+   body { overflow: hidden } in useViewportLock, and internal panels use
+   overflow-auto defensively in case content exceeds their box — but we
+   never want a visible scroll track, only functional scrolling. */
+* {
+  scrollbar-width: none;     /* Firefox */
+  -ms-overflow-style: none;  /* legacy Edge / IE */
+}
+*::-webkit-scrollbar {
+  display: none;             /* Chromium + Safari */
+  width: 0;
+  height: 0;
+}
+
+/* Staggered deal-in for task cards at round start. Scale-and-rotate only —
+   no translate, no overshoot past 1.0 — so cards never poke outside their
+   grid cell and can't trigger scrollbars on the task sidebar. `backwards`
+   fill-mode keeps the 0% state applied during the delay, so cards stay
+   invisible until their stagger fires. */
+@keyframes task-deal-in {
+  0%   { transform: scale(0.4) rotate(-8deg); opacity: 0; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+.task-card-deal {
+  animation: task-deal-in 0.7s cubic-bezier(0.25, 1, 0.5, 1) backwards;
+}
+
+/* Last-5-seconds warning — bold metronome pulse on the timer. */
+@keyframes timer-warning {
+  0%, 100% { transform: scale(1);    color: #e11d48; }
+  50%      { transform: scale(1.12); color: #be123c; }
+}
+.animate-timer-warning {
+  animation: timer-warning 0.5s ease-in-out infinite;
+  transform-origin: center;
+  display: inline-block;
+}
+
+/* Red inset ring around the play area during the last 5 seconds. */
+@keyframes play-area-warning {
+  0%, 100% { box-shadow: inset 0 0 0 3px rgba(225, 29, 72, 0.25); }
+  50%      { box-shadow: inset 0 0 0 4px rgba(225, 29, 72, 0.75); }
+}
+.animate-play-area-warning {
+  animation: play-area-warning 0.5s ease-in-out infinite;
+}
+
+/* Score recap lines slide in from the left, staggered. */
+@keyframes score-line-in {
+  0%   { opacity: 0; transform: translateX(-18px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+.animate-score-line-in {
+  animation: score-line-in 0.35s ease-out backwards;
+}
+
+/* Round total — pop emphasis at the end of the recap. */
+@keyframes score-total-pop {
+  0%   { opacity: 0; transform: scale(0.6); }
+  60%  { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.animate-score-total-pop {
+  animation: score-total-pop 0.55s cubic-bezier(0.3, 1.2, 0.5, 1) backwards;
+}
+
+/* Floating score delta (+N / −N) that rises from the header Score and fades. */
+@keyframes score-delta-float {
+  0%   { opacity: 0; transform: translate(-50%, 0) scale(0.8); }
+  15%  { opacity: 1; transform: translate(-50%, -8px) scale(1.1); }
+  70%  { opacity: 1; transform: translate(-50%, -44px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -64px) scale(0.95); }
+}
+.animate-score-delta {
+  animation: score-delta-float 1.5s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+}
+
+/* Countdown overlay digit — pop in, hold, fade out. Duration matches tick. */
+@keyframes countdown-pop {
+  0%   { transform: scale(0.4); opacity: 0; }
+  12%  { transform: scale(1.18); opacity: 1; }
+  82%  { transform: scale(1.0); opacity: 1; }
+  100% { transform: scale(1.05); opacity: 0; }
+}
+.animate-countdown-pop {
+  animation: countdown-pop 1s ease-out forwards;
+}
+
+/* Inventory balls. On mobile they're fixed-size inside a narrow strip; on
+   desktop the rack fills the sidebar vertically (auto-rows-fr) and balls
+   scale with the rack height via container queries so they stay visually
+   substantial no matter how tall the column gets. */
+.inventory-ball {
+  width: 20px;
+  height: 20px;
+}
+@media (min-width: 1024px) {
+  .inventory-rack {
+    container-type: size;
+  }
+  .inventory-ball {
+    width: clamp(28px, 55cqh, 64px);
+    height: clamp(28px, 55cqh, 64px);
+  }
+}
+
+/* White text with a black outline (via -webkit-text-stroke, which is supported
+   in all major browsers despite the prefix). paint-order keeps the stroke
+   behind the fill so the glyphs stay crisp. */
+.text-outlined {
+  color: #ffffff;
+  -webkit-text-stroke: 2px #000;
+  paint-order: stroke fill;
+}
+.text-outlined-thin {
+  color: #ffffff;
+  -webkit-text-stroke: 1px #000;
+  paint-order: stroke fill;
+}
+
+/* Felt texture — SVG turbulence noise overlaid on an emerald gradient.
+   Tiles 150×150 so the grain reads as fine fibers, not obvious repeats. */
+.felt-texture {
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='150' height='150'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch' seed='3'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.5 0.5 0 0 -0.38'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
+    linear-gradient(135deg, #047857 0%, #047857 55%, #065f46 100%);
+  background-size: 150px 150px, cover;
+}
+
+/* Task cards scale their contents against their own height via container
+   queries. Grid rows use 1fr so cards fill the column; clamp() keeps the
+   contents readable at any row height. */
+.task-card {
+  container-type: size;
+}
+/* Canonical sizes. All "main" balls on every card type use .task-sphere so the
+   visual weight is consistent. .task-sphere-sm is reserved for position-rule
+   stacks (3 elements vertically) and sized close to .task-sphere to minimise
+   perceived hierarchy. Maxes are set generous so content scales up on larger
+   cards when the grid has room to stretch. */
+.task-sphere {
+  width: clamp(22px, 40cqh, 46px);
+  height: clamp(22px, 40cqh, 46px);
+}
+.task-sphere-sm {
+  width: clamp(18px, 30cqh, 38px);
+  height: clamp(18px, 30cqh, 38px);
+}
+.task-icon-sm {
+  width: clamp(12px, 20cqh, 26px);
+  height: clamp(12px, 20cqh, 26px);
+}
+/* Text numbers beside a ball ("= N" on EXACT, ">" / "<" comparisons, etc.) */
+.task-num {
+  font-size: clamp(14px, 30cqh, 30px);
+}
+/* Numbers that sit INSIDE a ball (SUM's total). A touch smaller so the number
+   doesn't overwhelm the ball. */
+.task-num-inset {
+  font-size: clamp(12px, 24cqh, 22px);
+}
+.task-op-touch {
+  width: clamp(10px, 14cqh, 18px);
+  height: clamp(4px, 5cqh, 6px);
+}
+.task-op-cross {
+  width: clamp(12px, 18cqh, 22px);
+  height: clamp(12px, 18cqh, 22px);
+}
+.task-op-cross-bar {
+  width: clamp(16px, 24cqh, 28px);
+  height: clamp(2px, 3cqh, 3px);
+}
