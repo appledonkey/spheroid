@@ -426,11 +426,18 @@ export default function App() {
           startRound(1, effective, newSeed, false);
         }}
         onStartDaily={() => {
-          // Daily uses the Classic preset verbatim — short-form (3 rounds)
-          // makes same-hand score comparison more fun and likelier to bring
-          // players back.
-          const effective: Settings = { ...settings, ...CLASSIC_PRESET, mode: 'classic' };
+          // Daily is a 1-round bite-sized challenge. Card count is randomized
+          // 4-8 per day (seeded by the date, so everyone sees the same count).
+          // Time stays at Classic's 120s so high-card days aren't unfair.
           const seed = dateToSeed(today);
+          const dailyCards = 4 + (seed % 5);
+          const effective: Settings = {
+            ...settings,
+            ...CLASSIC_PRESET,
+            mode: 'classic',
+            numTasks: dailyCards,
+            totalRounds: 1,
+          };
           setActiveSettings(effective);
           setTotalScore(0);
           setBonusTokens(0);

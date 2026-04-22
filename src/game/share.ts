@@ -34,12 +34,18 @@ export function buildShareText(
   finalScore: number,
   rounds: ShareRound[],
 ): string {
-  // Framed-style: title with `#` prefix, score line, space-separated emoji
-  // grid, then a blank line before the URL so it renders cleanly in Discord /
-  // iMessage / Slack previews. If rounds is empty (back-compat entry from the
-  // pre-schema-v2 storage), omit the grid line entirely so the share doesn't
-  // have a weird blank gap.
-  const lines = [`Spheroids #${dateStr}`, `Score: ${finalScore}`];
+  // Framed-style: title with `#` prefix, a stats line (cards when we can tell —
+  // single-round dailies have one fixed count worth showing), then the emoji
+  // grid and URL. Blank line before the URL so it renders cleanly in Discord /
+  // iMessage / Slack previews.
+  const lines = [`Spheroids #${dateStr}`];
+  if (rounds.length === 1) {
+    // 1-round dailies: expose the card count so two people's scores can be
+    // compared in context (scoring a 12 on a 4-card day is not a 12 on 8 cards).
+    lines.push(`${rounds[0].taskCount} cards · Score ${finalScore}`);
+  } else {
+    lines.push(`Score: ${finalScore}`);
+  }
   if (rounds.length > 0) {
     lines.push(rounds.map(emojiFor).join(' '));
   }
