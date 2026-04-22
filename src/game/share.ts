@@ -16,6 +16,19 @@ export type ShareRound = {
   spheres: number;
 };
 
+// Resolve the share URL at call time so tests and dev builds work. Priority:
+//   1. VITE_SHARE_URL — set in Vercel / .env to override for prod (e.g. the
+//      eventual real domain). Must be prefixed `VITE_` to be exposed by Vite.
+//   2. window.location.origin — correct for whatever host is currently loaded,
+//      so the dev server, preview deployments, and unset prod all "just work".
+//   3. Hardcoded fallback for SSR / non-browser environments (never hit today).
+function shareUrl(): string {
+  const envUrl = import.meta.env.VITE_SHARE_URL;
+  if (typeof envUrl === 'string' && envUrl.length > 0) return envUrl;
+  if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin;
+  return 'https://spheroids.app';
+}
+
 export function buildShareText(
   dateStr: string,
   finalScore: number,
@@ -30,7 +43,7 @@ export function buildShareText(
   if (rounds.length > 0) {
     lines.push(rounds.map(emojiFor).join(' '));
   }
-  lines.push('', 'https://spheroids.app');
+  lines.push('', shareUrl());
   return lines.join('\n');
 }
 
