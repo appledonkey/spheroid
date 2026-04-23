@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import PartySocket from 'partysocket';
-import type { MultiplayerRoom } from '../types';
+import type { MultiplayerRoom, MultiplayerSettings } from '../types';
 import { makePlayerId } from './room';
 
 // Client ↔ server message shapes — must match partykit/server.ts. Duplicated
@@ -9,6 +9,7 @@ import { makePlayerId } from './room';
 type ClientMessage =
   | { type: 'join'; name: string }
   | { type: 'toggleReady' }
+  | { type: 'updateSettings'; settings: Partial<MultiplayerSettings> }
   | { type: 'start' }
   | { type: 'finish'; finalScore: number }
   | { type: 'playAgain' };

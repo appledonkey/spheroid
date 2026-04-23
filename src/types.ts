@@ -115,13 +115,19 @@ export type MultiplayerPlayer = {
   finished: boolean;
 };
 
+export type MultiplayerSettings = {
+  numTasks: number;
+  roundTime: number;
+  totalRounds: number;
+  difficulty: Difficulty;
+};
+
 export type MultiplayerRoom = {
   code: string;
-  // Resolved number of cards this room is playing with — chosen at create
-  // time from the code seed so all clients agree without any negotiation.
-  numTasks: number;
   phase: MultiplayerPhase;
   players: MultiplayerPlayer[];
+  // Host-configurable, server-broadcast. Server validates + clamps.
+  settings: MultiplayerSettings;
   // Local player's id, so the UI knows which roster row is "you".
   selfId: string;
 };

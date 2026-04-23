@@ -16,11 +16,22 @@ type ServerPlayer = {
 
 type Phase = 'lobby' | 'playing' | 'waiting' | 'results';
 
+type Difficulty = 'easy' | 'normal' | 'expert';
+
+// Settings live on the room so every client agrees on what's being played.
+// Host mutates via updateSettings; server validates and broadcasts.
+type RoomSettings = {
+  numTasks: number;     // 4..8
+  roundTime: number;    // 30..180 (step 15)
+  totalRounds: number;  // 1..5 — keep small for MP so sessions stay short
+  difficulty: Difficulty;
+};
+
 type RoomState = {
   code: string;
-  numTasks: number;
   phase: Phase;
   players: ServerPlayer[];
+  settings: RoomSettings;
   // Server timestamp when the host hit Start. Clients anchor their countdown
   // to this so everyone's "GO!" fires within network jitter of each other.
   startedAt: number | null;
@@ -29,6 +40,7 @@ type RoomState = {
 type ClientMessage =
   | { type: 'join'; name: string }
   | { type: 'toggleReady' }
+  | { type: 'updateSettings'; settings: Partial<RoomSettings> }
   | { type: 'start' }
   | { type: 'finish'; finalScore: number }
   | { type: 'playAgain' };
@@ -37,25 +49,41 @@ type ServerMessage =
   | { type: 'state'; state: RoomState }
   | { type: 'error'; message: string };
 
-// --- Room-seed derivation (duplicated from src/multiplayer/room.ts) ---------
-// Duplicated to keep the worker bundle self-contained; stays in sync by shape.
-
-function codeToSeed(code: string): number {
-  let hash = 5381;
-  const normalized = code.toUpperCase();
-  for (let i = 0; i < normalized.length; i++) {
-    hash = ((hash << 5) + hash + normalized.charCodeAt(i)) | 0;
-  }
-  return Math.abs(hash);
-}
-
-function cardsForRoom(code: string): number {
-  const seed = codeToSeed(code);
-  return Math.min(8, 4 + (seed % 5));
-}
-
 const MAX_PLAYERS = 8;
 const NAME_MAX = 16;
+
+// Ranges mirrored between server and client. Server re-validates on every
+// updateSettings so a tampered client can't smuggle out-of-range values.
+const RANGES = {
+  numTasks:    { min: 4,  max: 8,   step: 1 },
+  roundTime:   { min: 30, max: 180, step: 15 },
+  totalRounds: { min: 1,  max: 5,   step: 1 },
+} as const;
+
+const DEFAULT_SETTINGS: RoomSettings = {
+  numTasks: 6,
+  roundTime: 120,
+  totalRounds: 1,
+  difficulty: 'normal',
+};
+
+function clampStep(value: number, range: { min: number; max: number; step: number }): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return range.min;
+  const clamped = Math.min(range.max, Math.max(range.min, value));
+  const rounded = Math.round((clamped - range.min) / range.step) * range.step + range.min;
+  return Math.min(range.max, Math.max(range.min, rounded));
+}
+
+function sanitizeSettings(patch: Partial<RoomSettings>, base: RoomSettings): RoomSettings {
+  return {
+    numTasks:    patch.numTasks    !== undefined ? clampStep(patch.numTasks,    RANGES.numTasks)    : base.numTasks,
+    roundTime:   patch.roundTime   !== undefined ? clampStep(patch.roundTime,   RANGES.roundTime)   : base.roundTime,
+    totalRounds: patch.totalRounds !== undefined ? clampStep(patch.totalRounds, RANGES.totalRounds) : base.totalRounds,
+    difficulty:  (patch.difficulty === 'easy' || patch.difficulty === 'normal' || patch.difficulty === 'expert')
+      ? patch.difficulty
+      : base.difficulty,
+  };
+}
 
 export default class SpheroidsServer implements Party.Server {
   state: RoomState;
@@ -63,9 +91,9 @@ export default class SpheroidsServer implements Party.Server {
   constructor(readonly party: Party.Party) {
     this.state = {
       code: party.id.toUpperCase(),
-      numTasks: cardsForRoom(party.id),
       phase: 'lobby',
       players: [],
+      settings: { ...DEFAULT_SETTINGS },
       startedAt: null,
     };
   }
@@ -126,6 +154,19 @@ export default class SpheroidsServer implements Party.Server {
         if (!p) return;
         if (this.state.phase !== 'lobby') return;
         p.ready = !p.ready;
+        this.broadcastState();
+        return;
+      }
+
+      case 'updateSettings': {
+        const p = this.state.players.find(p => p.id === conn.id);
+        if (!p || !p.isHost) return;
+        if (this.state.phase !== 'lobby') return;
+        if (!msg.settings || typeof msg.settings !== 'object') return;
+        this.state.settings = sanitizeSettings(msg.settings, this.state.settings);
+        // Any settings change un-readies everyone so nobody accidentally
+        // starts a game they haven't confirmed the shape of.
+        this.state.players.forEach(q => { q.ready = false; });
         this.broadcastState();
         return;
       }

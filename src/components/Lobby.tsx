@@ -1,17 +1,30 @@
 import { useState } from 'react';
-import type { MultiplayerRoom } from '../types';
+import type { MultiplayerRoom, MultiplayerSettings } from '../types';
+import { SettingRow } from './SettingRow';
+import { ModeToggle } from './ModeToggle';
 
 export type LobbyProps = {
   room: MultiplayerRoom;
   // Toggle local player's ready state — sends a message to the server.
   onToggleReady: () => void;
+  // Host-only: update any subset of room settings. Server validates + clamps,
+  // broadcasts the sanitized values back to everyone (including host).
+  onUpdateSettings: (patch: Partial<MultiplayerSettings>) => void;
   // Start the game. Only host sees the Start button, server re-validates.
   onStart: () => void;
   // Quit lobby — disconnects the websocket and returns to the menu.
   onLeave: () => void;
 };
 
-export function Lobby({ room, onToggleReady, onStart, onLeave }: LobbyProps) {
+// Client-side knowledge of the server's ranges. Kept in sync with
+// partykit/server.ts's RANGES constant — grep if you change either.
+const RANGES = {
+  numTasks:    { min: 4,  max: 8,   step: 1 },
+  roundTime:   { min: 30, max: 180, step: 15 },
+  totalRounds: { min: 1,  max: 5,   step: 1 },
+};
+
+export function Lobby({ room, onToggleReady, onUpdateSettings, onStart, onLeave }: LobbyProps) {
   const self = room.players.find(p => p.id === room.selfId);
   const amHost = self?.isHost ?? false;
   const allReady = room.players.length >= 1 && room.players.every(p => p.ready);
@@ -44,7 +57,7 @@ export function Lobby({ room, onToggleReady, onStart, onLeave }: LobbyProps) {
             </svg>
           </button>
           <h2 className="text-lg font-bold text-slate-900">Room Lobby</h2>
-          <span className="ml-auto text-[10px] text-slate-500 uppercase tracking-wider font-semibold">{room.numTasks} cards</span>
+          <span className="ml-auto text-[10px] text-slate-500 uppercase tracking-wider font-semibold">{room.settings.numTasks} cards · {room.settings.totalRounds}r</span>
         </div>
 
         <div className="p-4 space-y-4 overflow-y-auto" data-allow-scroll>
@@ -93,6 +106,14 @@ export function Lobby({ room, onToggleReady, onStart, onLeave }: LobbyProps) {
             </ul>
           </div>
 
+          {/* Game settings — host can edit; non-hosts see the values read-only.
+              Any change un-readies everyone (server enforces) so the room has
+              to re-confirm what they're about to play. */}
+          <MpSettingsPanel
+            settings={room.settings}
+            isHost={amHost}
+            onUpdate={onUpdateSettings} />
+
           {/* Ready toggle (for self) + Start (host only) */}
           <div className="space-y-2">
             <button
@@ -126,6 +147,72 @@ export function Lobby({ room, onToggleReady, onStart, onLeave }: LobbyProps) {
           </div>
 
         </div>
+      </div>
+    </div>
+  );
+}
+
+function MpSettingsPanel({
+  settings, isHost, onUpdate,
+}: {
+  settings: MultiplayerSettings;
+  isHost: boolean;
+  onUpdate: (patch: Partial<MultiplayerSettings>) => void;
+}) {
+  // Non-host read-only view is intentionally the same visual layout as the
+  // editable one, just with dummy onChange handlers — keeps the lobby feeling
+  // identical for everyone and avoids a layout shift when host promotion
+  // changes who's editing.
+  const handleChange = (patch: Partial<MultiplayerSettings>) => {
+    if (!isHost) return;
+    onUpdate(patch);
+  };
+  return (
+    <div className="space-y-1.5">
+      <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+        <span>Game settings</span>
+        {!isHost && (
+          <span className="normal-case tracking-normal text-[10px] text-slate-400">
+            Host controls
+          </span>
+        )}
+      </div>
+      <div className={isHost ? '' : 'opacity-70 pointer-events-none'}>
+        <div className="grid grid-cols-2 gap-1.5 mb-1.5">
+          <SettingRow
+            label="Cards"
+            value={settings.numTasks}
+            min={RANGES.numTasks.min}
+            max={RANGES.numTasks.max}
+            step={RANGES.numTasks.step}
+            onChange={(v) => handleChange({ numTasks: v })} />
+          <SettingRow
+            label="Rounds"
+            value={settings.totalRounds}
+            min={RANGES.totalRounds.min}
+            max={RANGES.totalRounds.max}
+            step={RANGES.totalRounds.step}
+            onChange={(v) => handleChange({ totalRounds: v })} />
+        </div>
+        <div className="mb-1.5">
+          <SettingRow
+            label="Time"
+            suffix="s"
+            value={settings.roundTime}
+            min={RANGES.roundTime.min}
+            max={RANGES.roundTime.max}
+            step={RANGES.roundTime.step}
+            onChange={(v) => handleChange({ roundTime: v })} />
+        </div>
+        <ModeToggle
+          label="Difficulty"
+          value={settings.difficulty}
+          onChange={(v) => handleChange({ difficulty: v })}
+          options={[
+            { value: 'easy', label: 'Easy' },
+            { value: 'normal', label: 'Normal' },
+            { value: 'expert', label: 'Expert' },
+          ]} />
       </div>
     </div>
   );

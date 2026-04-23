@@ -326,8 +326,11 @@ export default function App() {
     const s = overrideSettings ?? activeSettings;
     const seed = overrideSeed ?? gameSeed;
     const daily = overrideIsDaily ?? isDaily;
-    // Difficulty applies to Escalation only; Classic always uses the normal pool.
-    const difficulty = s.mode === 'escalation' ? s.escalationDifficulty : 'normal';
+    // Classic → always normal. Escalation + Multiplayer → honor the selected
+    // difficulty (MP stores its difficulty in escalationDifficulty's slot so
+    // we don't need another Settings field). Daily is classic, so also normal.
+    const honorsDifficulty = s.mode === 'escalation' || (mpRoom !== null && !daily);
+    const difficulty = honorsDifficulty ? s.escalationDifficulty : 'normal';
     // Daily challenges want reproducible hands — everyone sees the same cards
     // for a given date. Non-daily runs keep using Math.random so repeats vary.
     const handSeed = daily ? roundSeed(seed, forRound) : undefined;
@@ -426,12 +429,17 @@ export default function App() {
     if (!mpRoom) { mpStartedRef.current = false; return; }
     if (mpRoom.phase === 'playing' && !mpStartedRef.current) {
       mpStartedRef.current = true;
+      // Server-authoritative settings — everyone in the room agrees on these
+      // via the state broadcast. We use 'classic' mode because multiplayer
+      // doesn't currently do escalation growth; difficulty is pulled through
+      // via the escalationDifficulty slot since that's what generateTasks reads.
       const effective: Settings = {
         ...settings,
-        ...CLASSIC_PRESET,
         mode: 'classic',
-        numTasks: mpRoom.numTasks,
-        totalRounds: 1,
+        numTasks: mpRoom.settings.numTasks,
+        roundTime: mpRoom.settings.roundTime,
+        totalRounds: mpRoom.settings.totalRounds,
+        escalationDifficulty: mpRoom.settings.difficulty,
       };
       const seed = codeToSeed(mpRoom.code);
       setActiveSettings(effective);
@@ -465,6 +473,10 @@ export default function App() {
 
   const handleToggleReady = () => {
     mpSend({ type: 'toggleReady' });
+  };
+
+  const handleUpdateSettings = (patch: Partial<import('./types').MultiplayerSettings>) => {
+    mpSend({ type: 'updateSettings', settings: patch });
   };
 
   const handleMpStart = () => {
@@ -530,6 +542,7 @@ export default function App() {
         <Lobby
           room={mpRoom}
           onToggleReady={handleToggleReady}
+          onUpdateSettings={handleUpdateSettings}
           onStart={handleMpStart}
           onLeave={handleMpLeave} />
       );
