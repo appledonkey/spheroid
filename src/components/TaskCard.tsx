@@ -200,17 +200,20 @@ export function TaskCard({ task, status, dealIndex }: TaskCardProps) {
     }
 
     if (task.type === 'TOUCH' || task.type === 'NO_TOUCH') {
-      // TOUCH = solid connector between the balls (they're "joined").
-      // NO_TOUCH = three short dashes with gaps (the connection is "broken").
-      // The visual language keeps the op in the same space but communicates
-      // the rule through line integrity rather than a bar vs cross.
+      // TOUCH  \u2192 solid emerald line between the balls ("these are joined").
+      // NO_TOUCH \u2192 dark line with a bold red X overlaid centered on it —
+      // "no-smoking-sign" iconography: the connection is visibly struck out,
+      // which reads instantly as a prohibition. The X is slightly wider than
+      // the line so the crossing is obvious at any card size.
       const op = task.type === 'TOUCH'
         ? <div className="task-op-line bg-emerald-500 rounded-full shrink-0" />
         : (
-          <div className="flex items-center gap-[3px] shrink-0">
-            <div className="task-op-dash bg-rose-500 rounded-full" />
-            <div className="task-op-dash bg-rose-500 rounded-full" />
-            <div className="task-op-dash bg-rose-500 rounded-full" />
+          <div className="relative shrink-0 flex items-center justify-center">
+            <div className="task-op-line bg-slate-800 rounded-full" />
+            <svg className="task-op-x absolute" viewBox="0 0 24 24" aria-hidden>
+              <line x1="4" y1="4" x2="20" y2="20" stroke="#ef4444" strokeWidth="5" strokeLinecap="round" />
+              <line x1="20" y1="4" x2="4" y2="20" stroke="#ef4444" strokeWidth="5" strokeLinecap="round" />
+            </svg>
           </div>
         );
       return (

@@ -309,16 +309,15 @@ body {
   font-size: clamp(12px, 24cqh, 22px);
 }
 /* Solid connector between two balls on a TOUCH card — reads as "these
-   are joined." Longer than the old task-op-touch so it visually bridges
-   the gap between the two balls. */
+   are joined." NO_TOUCH uses the same bar under a red X overlay, so the
+   line width is shared across both card types. */
 .task-op-line {
   width: clamp(16px, 24cqh, 30px);
   height: clamp(3px, 4cqh, 5px);
 }
-/* One dash segment of the NO_TOUCH broken line. Three of these in a row,
-   spaced with a small gap, make the "line-with-breaks" rendering that
-   communicates the rule without resorting to a cross icon. */
-.task-op-dash {
-  width: clamp(5px, 7cqh, 9px);
-  height: clamp(3px, 4cqh, 5px);
+/* Red X overlay that sits on top of .task-op-line for NO_TOUCH cards.
+   Sized a bit wider than the line so the crossing is clearly visible. */
+.task-op-x {
+  width: clamp(18px, 30cqh, 36px);
+  height: clamp(18px, 30cqh, 36px);
 }
