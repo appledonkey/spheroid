@@ -217,7 +217,11 @@ export function TaskCard({ task, status, dealIndex }: TaskCardProps) {
           </div>
         );
       return (
-        <div className="flex items-center justify-center h-full gap-1.5">
+        // Extra inner padding + a wider gap here — the two-ball layout was
+        // pushing the spheres right to the card edges, which made the cards
+        // feel cramped. px-3 pulls them inward, gap-2 gives the op visual
+        // room to breathe.
+        <div className="flex items-center justify-center h-full gap-2 px-3">
           <Sphere c={task.c1} />
           {op}
           <Sphere c={task.c2} />
@@ -235,7 +239,9 @@ export function TaskCard({ task, status, dealIndex }: TaskCardProps) {
 
     if (task.type === 'MORE_THAN' || task.type === 'LESS_THAN') {
       return (
-        <div className="flex items-center justify-center h-full gap-1.5">
+        // Matches TOUCH/NO_TOUCH inner padding so all two-ball layouts have
+        // consistent edge breathing.
+        <div className="flex items-center justify-center h-full gap-2 px-3">
           <Sphere c={task.c1} />
           <span className="font-bold task-num leading-none text-slate-800">
             {task.type === 'MORE_THAN' ? '>' : '<'}
