@@ -28,6 +28,7 @@ import { GameHeader } from './components/GameHeader';
 import { PauseMenu } from './components/PauseMenu';
 import { Lobby } from './components/Lobby';
 import { MultiplayerResults, MultiplayerWaiting } from './components/MultiplayerResults';
+import { Celebration, type CelebrationVariant } from './components/Celebration';
 
 const STARTING_INVENTORY: InventoryType = { coral: 3, amber: 3, pine: 3, iris: 3, pearl: 3 };
 const emptyBoard = (): Board => Array(NUM_SLOTS).fill(null);
@@ -87,6 +88,11 @@ export default function App() {
   // handoff. Auto-clears after 2s; lives here so both game-over and future
   // in-menu share entrypoints can reuse.
   const [shareToast, setShareToast] = useState<string | null>(null);
+  // Celebration overlay — incrementing counter fires a new celebration. The
+  // variant drives the headline text (BONUS TOKEN! vs WINNER!) and particle
+  // palette. Fires when you earn a bonus token, or when you win a MP room.
+  const [celebrationTrigger, setCelebrationTrigger] = useState(0);
+  const [celebrationVariant, setCelebrationVariant] = useState<CelebrationVariant>('bonus-token');
   // Rulebook: bonus tokens accumulate across rounds and convert to a final
   // score adjustment at game end (see BONUS_TOKEN_TABLE in scoring.ts).
   const [bonusTokens, setBonusTokens] = useState(0);
@@ -204,6 +210,8 @@ export default function App() {
       setBonusTokens(nextTokens);
       sfx.tokenEarned();
       haptics.tokenEarned();
+      setCelebrationVariant('bonus-token');
+      setCelebrationTrigger(k => k + 1);
     }
     const passedCount = result.tasks.filter(t => t.passed).length;
     const historyEntry = {
@@ -441,6 +449,30 @@ export default function App() {
     return () => clearTimeout(t);
   }, [mpError]);
 
+  // Fire the celebration overlay when MP results land and the local player
+  // is the top scorer. Guarded by a ref so we only fire once per results
+  // transition (not every time state updates while on the results screen).
+  const mpWinnerFiredRef = useRef(false);
+  useEffect(() => {
+    if (!mpRoom) { mpWinnerFiredRef.current = false; return; }
+    if (mpRoom.phase !== 'results') {
+      mpWinnerFiredRef.current = false;
+      return;
+    }
+    if (mpWinnerFiredRef.current) return;
+    // Sort descending by score; if the top player is us, celebrate.
+    const ranked = [...mpRoom.players].sort((a, b) => (b.finalScore ?? 0) - (a.finalScore ?? 0));
+    if (ranked.length > 0 && ranked[0].id === mpRoom.selfId) {
+      mpWinnerFiredRef.current = true;
+      // Delay slightly so the celebration lands after the reveal animation
+      // starts — feels like the payoff of the building tension.
+      setTimeout(() => {
+        setCelebrationVariant('mp-winner');
+        setCelebrationTrigger(k => k + 1);
+      }, 350);
+    }
+  }, [mpRoom]);
+
   // When the server broadcasts that the game started, kick off our local game
   // loop with the room's seed + card count. The hook returns the latest room
   // on every state broadcast; we only want to START the local game once per
@@ -652,6 +684,7 @@ export default function App() {
           </div>
         </div>
       )}
+      <Celebration trigger={celebrationTrigger} variant={celebrationVariant} />
       </>
     );
   }
@@ -825,6 +858,7 @@ export default function App() {
         </div>
       )}
 
+      <Celebration trigger={celebrationTrigger} variant={celebrationVariant} />
     </div>
   );
 }

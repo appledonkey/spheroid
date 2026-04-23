@@ -47,10 +47,13 @@ export function MultiplayerResults({ players, selfId, onPlayAgain, onBackToMenu 
 
         <div className="p-4 space-y-3 overflow-y-auto" data-allow-scroll>
           {visibleCount > 0 && winner && (
-            <div className="bg-gradient-to-b from-amber-50 to-amber-100 border-2 border-amber-300 rounded-xl p-4 text-center animate-score-total-pop">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Winner</div>
-              <div className="text-3xl font-bold text-slate-900 my-1">{winner.name}</div>
-              <div className="text-4xl font-bold tabular-nums text-amber-700">{winner.finalScore ?? 0}</div>
+            <div className="relative bg-gradient-to-b from-amber-50 to-amber-100 border-2 border-amber-400 rounded-xl p-4 text-center animate-score-total-pop animate-winner-halo overflow-hidden">
+              {/* Subtle shimmer pass — light sweeping diagonally across the
+                  card. Pure CSS, purely decorative. */}
+              <div className="pointer-events-none absolute -inset-1 opacity-60 animate-winner-shimmer" />
+              <div className="relative text-[11px] font-bold uppercase tracking-wider text-amber-700">Winner</div>
+              <div className="relative text-3xl font-bold text-slate-900 my-1">{winner.name}</div>
+              <div className="relative text-4xl font-bold tabular-nums text-amber-700">{winner.finalScore ?? 0}</div>
             </div>
           )}
 
