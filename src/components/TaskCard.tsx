@@ -78,6 +78,38 @@ const OmniBall = () => {
   );
 };
 
+// Single-color ball with a target number embedded in its face. Used for
+// EXACT tasks so the "= N" visual language matches SplitBall's inside-the-
+// ball number style — same font, same stroke, same slot in the composition.
+// Keeps the card-vocabulary uniform when both EXACT and SUM appear in a deal.
+const NumberedBall = ({ c, n }: { c: Color; n: number }) => {
+  const id = useId();
+  const { base } = COLOR_GRADIENTS[c];
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      className="task-sphere shrink-0"
+      style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))' }}>
+      <BallGradientDefs id={id} />
+      <circle cx="50" cy="50" r="49" fill={base} />
+      <circle cx="50" cy="50" r="49" fill={`url(#${id}-edge)`} />
+      <circle cx="50" cy="50" r="49" fill={`url(#${id}-gloss)`} />
+      <text
+        x="50" y="52"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize="44"
+        fontWeight="800"
+        fill="white"
+        stroke="black"
+        strokeWidth="3.5"
+        style={{ paintOrder: 'stroke' }}>
+        {n}
+      </text>
+    </svg>
+  );
+};
+
 // Diagonally split ball with a target number on top. Used for SUM tasks.
 // SVG version: two semicircle paths split on the 45° axis, clean edge vs
 // the old linear-gradient diagonal which stair-stepped at small sizes.
@@ -195,10 +227,12 @@ export function TaskCard({ task, status, dealIndex }: TaskCardProps) {
 
   const renderIcon = () => {
     if (task.type === 'EXACT') {
+      // Number lives inside the ball to match SplitBall (SUM). Single hero
+      // element centered in the card — same visual slot as the NumberedBall
+      // / SplitBall composition across cards that carry a count.
       return (
-        <div className="flex items-center justify-center h-full gap-2">
-          <Sphere c={task.c} />
-          <span className="font-bold task-num leading-none text-slate-800 tabular-nums">= {task.n}</span>
+        <div className="flex items-center justify-center h-full">
+          <NumberedBall c={task.c} n={task.n} />
         </div>
       );
     }

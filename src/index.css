@@ -299,9 +299,14 @@ body {
   width: clamp(20px, 32cqh, 38px);
   height: clamp(20px, 32cqh, 38px);
 }
+/* Stacked-layout balls (NOT_ON_TOP / NOT_UNDER). Max bumped so they scale
+   up to match .task-sphere on tall cards — keeps sphere sizing uniform
+   across solo-style cards. The clamp factor stays conservative (28cqh) so
+   the vertical stack (ball + arrow + ball) still fits on short mobile
+   cards without clipping. */
 .task-sphere-sm {
-  width: clamp(18px, 30cqh, 38px);
-  height: clamp(18px, 30cqh, 38px);
+  width: clamp(18px, 28cqh, 44px);
+  height: clamp(18px, 28cqh, 44px);
 }
 .task-icon-sm {
   width: clamp(12px, 20cqh, 26px);
