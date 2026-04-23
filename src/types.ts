@@ -70,10 +70,6 @@ export type EvaluatedTask = Task & {
 
 export type RoundResult = {
   spheres: number;
-  timeBonus: number;
-  timeRemaining: number;
-  // Per-rulebook: every task must pass to earn the time bonus. No engagement
-  // carve-out — failing a task you never touched still counts as failing.
   allTasksPassed: boolean;
   // Used all 5 colors on the tray this round. Combined with allTasksPassed,
   // earns a bonus token that's cashed in at end-of-game via BONUS_TOKEN_TABLE.

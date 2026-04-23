@@ -1,7 +1,5 @@
-import { useEffect, useState } from 'react';
 import {
   FAILED_TASK_PENALTY,
-  TIME_BONUS_SECONDS_PER_POINT,
   convertBonusTokens,
 } from '../game/scoring';
 import type { RoundResult as RoundResultType } from '../types';
@@ -44,31 +42,10 @@ export function RoundResult({
   isNewBest, modeBest, isGameOver, isDaily, onShare,
   onNext, onRestart, onBackToMenu,
 }: RoundResultProps) {
-  // SMW-style time bonus: ticks up from 0 to the final value over ~0.6–2s.
-  // The round total animates in lockstep so the running sum stays consistent.
-  const [timeBonusShown, setTimeBonusShown] = useState(0);
-
-  useEffect(() => {
-    const target = roundResult.timeBonus;
-    if (target <= 0) { setTimeBonusShown(0); return; }
-    setTimeBonusShown(0);
-    const duration = Math.min(2000, Math.max(600, target * 60));
-    const start = performance.now();
-    let raf = 0;
-    const tick = (now: number) => {
-      const p = Math.min(1, (now - start) / duration);
-      setTimeBonusShown(Math.floor(p * target));
-      if (p < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [roundResult.timeBonus]);
-
-  const totalShown = roundResult.total - roundResult.timeBonus + timeBonusShown;
-  const secondsLeft = Math.floor(roundResult.timeRemaining);
+  const totalShown = roundResult.total;
 
   // Score-line list — each gets a stagger delay.
-  type Line = { icon: JSX.Element; label: string; value: number; tone: 'plus' | 'minus' | 'time' };
+  type Line = { icon: JSX.Element; label: string; value: number; tone: 'plus' | 'minus' };
   const lines: Line[] = [];
 
   lines.push({
@@ -77,15 +54,6 @@ export function RoundResult({
     value: roundResult.spheres,
     tone: 'plus',
   });
-
-  if (roundResult.timeBonus > 0) {
-    lines.push({
-      icon: <ClockIcon />,
-      label: `Time bonus (${secondsLeft}s × 1/${TIME_BONUS_SECONDS_PER_POINT})`,
-      value: timeBonusShown,
-      tone: 'time',
-    });
-  }
 
   const failedTasks = roundResult.tasks
     .map((t, i) => ({ t, i }))
@@ -315,19 +283,13 @@ type ScoreLineProps = {
   icon: JSX.Element;
   label: string;
   value: number;
-  tone: 'plus' | 'minus' | 'time';
+  tone: 'plus' | 'minus';
   delayMs: number;
 };
 
 function ScoreLine({ icon, label, value, tone, delayMs }: ScoreLineProps) {
-  const valueColor =
-    tone === 'minus'  ? 'text-rose-600'
-    : tone === 'time'  ? 'text-sky-600'
-    : 'text-slate-800';
-  const bgTint =
-    tone === 'minus'  ? 'bg-rose-50'
-    : tone === 'time'  ? 'bg-sky-50'
-    : 'bg-slate-50';
+  const valueColor = tone === 'minus' ? 'text-rose-600' : 'text-slate-800';
+  const bgTint     = tone === 'minus' ? 'bg-rose-50'    : 'bg-slate-50';
 
   return (
     <li
@@ -350,13 +312,6 @@ const SphereIcon = () => (
   <div
     className="w-5 h-5 rounded-full shadow-sm"
     style={{ background: 'radial-gradient(circle at 35% 28%, #cbd5e1, #475569 45%, #0f172a 100%)' }} />
-);
-
-const ClockIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0284c7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="9" />
-    <path d="M12 7v5l3 2" />
-  </svg>
 );
 
 const FailIcon = () => (

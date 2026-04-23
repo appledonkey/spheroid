@@ -201,7 +201,7 @@ export default function App() {
   ]);
 
   const endRound = useCallback(() => {
-    const result = scoreRound(board, tasks, timer);
+    const result = scoreRound(board, tasks);
     setRoundResult(result);
     const nextTotal = totalScore + result.total;
     const nextTokens = bonusTokens + (result.bonusTokenEarned ? 1 : 0);

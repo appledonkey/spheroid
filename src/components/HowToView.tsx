@@ -47,7 +47,6 @@ export function HowToView({ onBack }: HowToViewProps) {
           <ul className="list-disc list-outside pl-5 space-y-1">
             <li>+1 per sphere placed on your tray</li>
             <li>−2 for each condition that isn't met (whether or not you touched its colors)</li>
-            <li>+1 per 10 seconds remaining — only when every task passes</li>
           </ul>
         </section>
         <section>
