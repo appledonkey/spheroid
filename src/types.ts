@@ -86,3 +86,42 @@ export type RoundResult = {
 export type Inventory = Record<Color, number>;
 
 export type TaskStatus = 'pass' | 'fail' | 'live-pass' | 'live-fail' | null;
+
+// --- Multiplayer (Phase 1: mocked local state) --------------------------
+// In Phase 2 these same shapes will be driven by the PartyKit server. Keeping
+// them UI-oriented now means the swap is mostly replacing the state source,
+// not rewriting every component that consumes them.
+
+export type MultiplayerPhase =
+  | 'lobby'      // players joining, ready-upping
+  | 'countdown'  // synced 3-2-1-GO before the round starts
+  | 'playing'    // your game in progress; roster shows finished state
+  | 'waiting'    // you've finished (or timed out); others still playing
+  | 'results';   // all done, ranked reveal
+
+export type MultiplayerPlayer = {
+  id: string;
+  name: string;
+  // Host of the room (the player who created it). If they leave mid-lobby,
+  // we'd promote — Phase 1 is single-host-only.
+  isHost: boolean;
+  // Set true when the player taps Ready in the lobby. Host needs all ready
+  // before the Start button enables.
+  ready: boolean;
+  // Populated after the game finishes. Null while still playing.
+  finalScore: number | null;
+  // Populated once the player completes their round. Used to show "finished"
+  // state on the lobby roster during play, and drives the results reveal.
+  finished: boolean;
+};
+
+export type MultiplayerRoom = {
+  code: string;
+  // Resolved number of cards this room is playing with — chosen at create
+  // time from the code seed so all clients agree without any negotiation.
+  numTasks: number;
+  phase: MultiplayerPhase;
+  players: MultiplayerPlayer[];
+  // Local player's id, so the UI knows which roster row is "you".
+  selfId: string;
+};

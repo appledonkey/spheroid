@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { EscalationGrowth, GameMode, Settings } from '../types';
 import type { UpdateSetting } from '../hooks/useSettings';
 import { SETTINGS_RANGES } from '../storage/settings';
@@ -7,8 +7,11 @@ import type { BestScores } from '../storage/scores';
 import { ModeToggle } from './ModeToggle';
 import { SettingRow } from './SettingRow';
 import { HowToView } from './HowToView';
+import { loadPlayerName, savePlayerName } from '../storage/player';
+import { generateRoomCode, looksLikeValidCode } from '../multiplayer/room';
 
-type View = 'title' | 'mode-chooser' | 'how-to' | 'daily-done';
+type View = 'title' | 'mode-chooser' | 'how-to' | 'daily-done'
+  | 'mp-chooser' | 'mp-create' | 'mp-join';
 
 export type MenuProps = {
   settings: Settings;
@@ -22,10 +25,25 @@ export type MenuProps = {
   // Called when the user shares from DailyDoneView — App knows the full
   // round history for building the spoiler-free grid.
   onShareDaily: () => void;
+  // Multiplayer entry points. `code` is 4-letter uppercase; `name` is the
+  // display name the local player picked. App handles room creation / join.
+  onCreateRoom: (name: string, code: string) => void;
+  onJoinRoom: (name: string, code: string) => void;
+  // If arrived via ?room=CODE, Menu auto-opens mp-join with this prefilled.
+  initialJoinCode?: string;
 };
 
-export function Menu({ settings, onUpdateSetting, onStart, onStartDaily, bestScores, dailyScore, onShareDaily }: MenuProps) {
-  const [view, setView] = useState<View>('title');
+export function Menu({
+  settings, onUpdateSetting, onStart, onStartDaily, bestScores, dailyScore, onShareDaily,
+  onCreateRoom, onJoinRoom, initialJoinCode,
+}: MenuProps) {
+  const [view, setView] = useState<View>(initialJoinCode ? 'mp-join' : 'title');
+
+  // If the URL room code arrives after mount (won't in practice, but defensive
+  // against future routing changes), still jump to the join view.
+  useEffect(() => {
+    if (initialJoinCode) setView('mp-join');
+  }, [initialJoinCode]);
 
   return (
     <div className="bg-emerald-950 flex flex-col items-center justify-center p-4 fixed inset-0 overflow-hidden"
@@ -40,6 +58,7 @@ export function Menu({ settings, onUpdateSetting, onStart, onStartDaily, bestSco
             if (dailyScore !== null) setView('daily-done');
             else onStartDaily();
           }}
+          onPlayWithFriends={() => setView('mp-chooser')}
           onOpenHowTo={() => setView('how-to')} />
       )}
       {view === 'mode-chooser' && (
@@ -64,6 +83,29 @@ export function Menu({ settings, onUpdateSetting, onStart, onStartDaily, bestSco
             onBack={() => setView('title')} />
         </div>
       )}
+      {view === 'mp-chooser' && (
+        <div className="bg-white rounded-2xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden">
+          <MpChooserView
+            onCreate={() => setView('mp-create')}
+            onJoin={() => setView('mp-join')}
+            onBack={() => setView('title')} />
+        </div>
+      )}
+      {view === 'mp-create' && (
+        <div className="bg-white rounded-2xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden">
+          <MpCreateView
+            onCreate={(name) => onCreateRoom(name, generateRoomCode())}
+            onBack={() => setView('mp-chooser')} />
+        </div>
+      )}
+      {view === 'mp-join' && (
+        <div className="bg-white rounded-2xl shadow-xl max-w-md w-full border border-slate-200 overflow-hidden">
+          <MpJoinView
+            initialCode={initialJoinCode ?? ''}
+            onJoin={onJoinRoom}
+            onBack={() => setView(initialJoinCode ? 'title' : 'mp-chooser')} />
+        </div>
+      )}
     </div>
   );
 }
@@ -74,10 +116,11 @@ type TitleViewProps = {
   dailyScore: number | null;
   onPlay: () => void;
   onDaily: () => void;
+  onPlayWithFriends: () => void;
   onOpenHowTo: () => void;
 };
 
-function TitleView({ totalRounds, bestScores, dailyScore, onPlay, onDaily, onOpenHowTo }: TitleViewProps) {
+function TitleView({ totalRounds, bestScores, dailyScore, onPlay, onDaily, onPlayWithFriends, onOpenHowTo }: TitleViewProps) {
   const hasAnyBest = bestScores.classic !== null || bestScores.escalation !== null;
   const playedToday = dailyScore !== null;
   return (
@@ -122,6 +165,13 @@ function TitleView({ totalRounds, bestScores, dailyScore, onPlay, onDaily, onOpe
           )}
         </button>
         <button
+          onClick={onPlayWithFriends}
+          style={{ touchAction: 'manipulation' }}
+          className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl transition-colors active:scale-[0.98] flex items-center justify-center gap-2">
+          <FriendsIcon />
+          Play with Friends
+        </button>
+        <button
           onClick={onOpenHowTo}
           style={{ touchAction: 'manipulation' }}
           className="w-full bg-white hover:bg-slate-50 text-slate-700 font-semibold py-2.5 px-4 rounded-xl border border-slate-300 transition-colors active:scale-[0.98]">
@@ -129,6 +179,17 @@ function TitleView({ totalRounds, bestScores, dailyScore, onPlay, onDaily, onOpe
         </button>
       </div>
     </>
+  );
+}
+
+function FriendsIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
   );
 }
 
@@ -358,4 +419,127 @@ function escalationHint(start: number, growth: EscalationGrowth): string {
     return `R1–R2: ${a}, R3–R4: ${b}, R5+: ${c} (cap ${cap})`;
   }
   return `Starts at ${start}, randomly grows each round (cap ${cap})`;
+}
+
+// ---------- Multiplayer views ----------
+
+function MpChooserHeader({ title, onBack }: { title: string; onBack: () => void }) {
+  return (
+    <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200">
+      <button
+        onClick={onBack}
+        aria-label="Back"
+        style={{ touchAction: 'manipulation' }}
+        className="w-9 h-9 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center active:scale-95 transition-transform shrink-0">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </button>
+      <h2 className="text-lg font-bold text-slate-900">{title}</h2>
+    </div>
+  );
+}
+
+function MpChooserView({ onCreate, onJoin, onBack }: { onCreate: () => void; onJoin: () => void; onBack: () => void }) {
+  return (
+    <div className="flex flex-col">
+      <MpChooserHeader title="Play with Friends" onBack={onBack} />
+      <div className="p-4 space-y-2.5">
+        <button
+          onClick={onCreate}
+          style={{ touchAction: 'manipulation' }}
+          className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl transition-colors active:scale-[0.98]">
+          Create Room
+        </button>
+        <button
+          onClick={onJoin}
+          style={{ touchAction: 'manipulation' }}
+          className="w-full bg-white hover:bg-slate-50 text-slate-700 font-semibold py-3 px-4 rounded-xl border border-slate-300 transition-colors active:scale-[0.98]">
+          Join with Code
+        </button>
+        <p className="text-xs text-slate-500 px-1 leading-relaxed pt-1">
+          Create a room to get a 4-letter code you can send to friends. Everyone plays the same hand at the same time, and the winner is revealed at the end.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function MpNameInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="space-y-1">
+      <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Your name</label>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        maxLength={16}
+        placeholder="e.g. James"
+        className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent" />
+    </div>
+  );
+}
+
+function MpCreateView({ onCreate, onBack }: { onCreate: (name: string) => void; onBack: () => void }) {
+  const [name, setName] = useState(() => loadPlayerName());
+  const ready = name.trim().length > 0;
+  return (
+    <div className="flex flex-col">
+      <MpChooserHeader title="Create Room" onBack={onBack} />
+      <div className="p-4 space-y-3">
+        <MpNameInput value={name} onChange={setName} />
+        <button
+          onClick={() => { if (ready) { savePlayerName(name.trim()); onCreate(name.trim()); } }}
+          disabled={!ready}
+          style={{ touchAction: 'manipulation' }}
+          className={`w-full font-bold py-2.5 px-4 rounded-xl transition-colors active:scale-[0.98] ${
+            ready
+              ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
+              : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+          }`}>
+          Create Room
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MpJoinView({
+  initialCode, onJoin, onBack,
+}: {
+  initialCode: string;
+  onJoin: (name: string, code: string) => void;
+  onBack: () => void;
+}) {
+  const [name, setName] = useState(() => loadPlayerName());
+  const [code, setCode] = useState(initialCode.toUpperCase());
+  const codeValid = looksLikeValidCode(code);
+  const ready = name.trim().length > 0 && codeValid;
+  return (
+    <div className="flex flex-col">
+      <MpChooserHeader title="Join Room" onBack={onBack} />
+      <div className="p-4 space-y-3">
+        <MpNameInput value={name} onChange={setName} />
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Room code</label>
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            maxLength={4}
+            placeholder="ABCD"
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 font-mono tracking-[0.3em] text-center text-2xl uppercase focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent" />
+        </div>
+        <button
+          onClick={() => { if (ready) { savePlayerName(name.trim()); onJoin(name.trim(), code); } }}
+          disabled={!ready}
+          style={{ touchAction: 'manipulation' }}
+          className={`w-full font-bold py-2.5 px-4 rounded-xl transition-colors active:scale-[0.98] ${
+            ready
+              ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
+              : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+          }`}>
+          Join Room
+        </button>
+      </div>
+    </div>
+  );
 }

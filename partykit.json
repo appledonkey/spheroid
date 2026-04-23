@@ -1,0 +1,6 @@
+{
+  "$schema": "https://www.partykit.io/schema.json",
+  "name": "spheroids-party",
+  "main": "partykit/server.ts",
+  "compatibilityDate": "2024-09-13"
+}

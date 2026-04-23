@@ -12,3 +12,6 @@ dist-ssr
 
 # Claude Code — machine-local permissions / state
 .claude/settings.local.json
+
+# PartyKit local dev cache
+.partykit

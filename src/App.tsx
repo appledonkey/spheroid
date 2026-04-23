@@ -17,6 +17,8 @@ import { clearGameSnapshot, loadGameSnapshot, saveGameSnapshot } from './storage
 import { loadBestScores, recordBestScore, type BestScores } from './storage/scores';
 import { dateToSeed, getDailyEntry, getDailyScore, recordDaily, todayDateStr } from './storage/daily';
 import { buildShareText, shareText } from './game/share';
+import { codeToSeed } from './multiplayer/room';
+import { useMultiplayerRoom } from './multiplayer/useMultiplayerRoom';
 import { Board3D } from './three/Board3D';
 import { TaskCard } from './components/TaskCard';
 import { Menu } from './components/Menu';
@@ -24,6 +26,8 @@ import { Inventory } from './components/Inventory';
 import { RoundResult } from './components/RoundResult';
 import { GameHeader } from './components/GameHeader';
 import { PauseMenu } from './components/PauseMenu';
+import { Lobby } from './components/Lobby';
+import { MultiplayerResults, MultiplayerWaiting } from './components/MultiplayerResults';
 
 const STARTING_INVENTORY: InventoryType = { coral: 3, amber: 3, pine: 3, iris: 3, pearl: 3 };
 const emptyBoard = (): Board => Array(NUM_SLOTS).fill(null);
@@ -96,6 +100,24 @@ export default function App() {
   // hand seeding each round and the recordDaily call at game end. Daily uses
   // the Classic preset for its settings; this flag is the extra bit.
   const [isDaily, setIsDaily] = useState(false);
+  // Multiplayer is driven by the PartyKit-backed hook. We set `mpSession`
+  // (code + name) to trigger a connect; the hook returns the authoritative
+  // room state via websocket. `mpRoom` downstream consumers use is the
+  // server's view, not local mutable state.
+  const [mpSession, setMpSession] = useState<{ code: string; name: string } | null>(null);
+  const { room: mpRoom, send: mpSend, error: mpError } = useMultiplayerRoom(
+    mpSession?.code ?? null,
+    mpSession?.name ?? null,
+  );
+  // Pulled off the URL once on mount — if present, Menu opens the Join flow
+  // with this code prefilled. Consumed after the first render.
+  const [initialRoomCode] = useState<string | undefined>(() => {
+    if (typeof window === 'undefined') return undefined;
+    const code = new URLSearchParams(window.location.search).get('room');
+    if (!code) return undefined;
+    const trimmed = code.toUpperCase().trim().slice(0, 4);
+    return trimmed.length === 4 ? trimmed : undefined;
+  });
   // Track previous score so we can emit floating deltas when it changes.
   const prevScoreRef = useRef(0);
 
@@ -191,14 +213,26 @@ export default function App() {
     };
     setRoundHistory(prev => [...prev, historyEntry]);
     const isGameOver = round >= activeSettings.totalRounds;
-    setGameState(isGameOver ? 'game_over' : 'round_over');
+    // In multiplayer we leave the per-game state machine entirely at the end
+    // of the round — the lobby-flavored "waiting" / "results" screens take
+    // over via the gameState==='menu' + mpRoom routing.
+    if (mpRoom && isGameOver) {
+      setGameState('menu');
+    } else {
+      setGameState(isGameOver ? 'game_over' : 'round_over');
+    }
     if (isGameOver) {
       // Final score = sum of round totals + end-of-game token conversion.
       const finalScore = nextTotal + convertBonusTokens(nextTokens, activeSettings.totalRounds);
       // Daily runs have their own scoreboard — they don't touch the per-mode
       // Classic / Escalation bests so a strong daily doesn't shadow those.
+      // Multiplayer runs also skip both — scoring lives on the room roster.
       let isNewBest = false;
-      if (isDaily) {
+      if (mpRoom) {
+        // Broadcast the score to the server; it'll flip our player to
+        // finished=true and advance the room phase when everyone's done.
+        mpSend({ type: 'finish', finalScore });
+      } else if (isDaily) {
         // roundHistory state hasn't been committed yet (setState above), so
         // build the final list locally by appending the just-scored entry.
         recordDaily(todayDateStr(), finalScore, [...roundHistory, historyEntry]);
@@ -215,7 +249,7 @@ export default function App() {
         else { sfx.gameOver(); haptics.gameOver(); }
       }, delay);
     }
-  }, [board, tasks, timer, round, totalScore, bonusTokens, activeSettings.totalRounds, activeSettings.mode, isDaily]);
+  }, [board, tasks, timer, round, totalScore, bonusTokens, activeSettings.totalRounds, activeSettings.mode, isDaily, mpRoom, roundHistory]);
 
   // Mirror of endRound for the timer effect — keeps effect deps minimal so
   // per-placement board changes don't reset the setTimeout.
@@ -356,11 +390,97 @@ export default function App() {
     setRoundHistory([]);
     setNewBestSet(false);
     setIsDaily(false);
+    setMpSession(null);
     setMenuOpen(false);
     setGameState('menu');
+    // Strip ?room= off the URL so "Back to Menu" doesn't re-snap to Join view
+    // on the next mount / reload.
+    if (typeof window !== 'undefined' && window.location.search.includes('room=')) {
+      try {
+        window.history.replaceState({}, '', window.location.pathname);
+      } catch {
+        // ignore — query param stripping is a polish, not load-bearing
+      }
+    }
   };
 
   const resumeFromMenu = () => setMenuOpen(false);
+
+  // Surface server errors (room full, game already started) as the same
+  // toast we use for share confirmations. Bounce the session back to the menu
+  // so the user can try a different code.
+  useEffect(() => {
+    if (!mpError) return;
+    setShareToast(mpError);
+    setMpSession(null);
+    const t = setTimeout(() => setShareToast(null), 2500);
+    return () => clearTimeout(t);
+  }, [mpError]);
+
+  // When the server broadcasts that the game started, kick off our local game
+  // loop with the room's seed + card count. The hook returns the latest room
+  // on every state broadcast; we only want to START the local game once per
+  // transition into 'playing', not on every subsequent broadcast.
+  const mpStartedRef = useRef(false);
+  useEffect(() => {
+    if (!mpRoom) { mpStartedRef.current = false; return; }
+    if (mpRoom.phase === 'playing' && !mpStartedRef.current) {
+      mpStartedRef.current = true;
+      const effective: Settings = {
+        ...settings,
+        ...CLASSIC_PRESET,
+        mode: 'classic',
+        numTasks: mpRoom.numTasks,
+        totalRounds: 1,
+      };
+      const seed = codeToSeed(mpRoom.code);
+      setActiveSettings(effective);
+      setTotalScore(0);
+      setBonusTokens(0);
+      setRoundHistory([]);
+      setNewBestSet(false);
+      setIsDaily(false);
+      setGameSeed(seed);
+      setRound(1);
+      startRound(1, effective, seed, true);
+    }
+    if (mpRoom.phase === 'lobby') {
+      // Reset the "we started the local game" guard so a subsequent playAgain
+      // starts fresh.
+      mpStartedRef.current = false;
+    }
+  }, [mpRoom, settings]);
+
+  // --- Multiplayer handlers (Phase 2: server-backed via PartyKit) ---------
+
+  const handleCreateRoom = (name: string, code: string) => {
+    // No special server call to "create" — connecting to a room with no
+    // prior occupants creates it implicitly. The first joiner becomes host.
+    setMpSession({ code, name });
+  };
+
+  const handleJoinRoom = (name: string, code: string) => {
+    setMpSession({ code, name });
+  };
+
+  const handleToggleReady = () => {
+    mpSend({ type: 'toggleReady' });
+  };
+
+  const handleMpStart = () => {
+    // Server validates everyone-is-ready and host-only; we just send the intent.
+    mpSend({ type: 'start' });
+  };
+
+  const handleMpLeave = () => {
+    setMpSession(null); // tears down the websocket via the hook's effect cleanup
+    backToMenu();
+  };
+
+  const handleMpPlayAgain = () => {
+    mpSend({ type: 'playAgain' });
+    setGameState('menu');  // Lobby lives outside the game state machine
+  };
 
   const handleShareDaily = useCallback(async () => {
     const finalScore = totalScore + convertBonusTokens(bonusTokens, activeSettings.totalRounds);
@@ -387,6 +507,46 @@ export default function App() {
   };
 
   if (gameState === 'menu') {
+    // Multiplayer lobby / waiting / results screens live outside the regular
+    // game state machine — they're shown when the player's in a room and not
+    // currently playing a round.
+    // Connecting — session asked for, room snapshot not yet received. Brief,
+    // but worth a placeholder so the user doesn't see a flash of the Menu.
+    if (mpSession && !mpRoom) {
+      return (
+        <div className="bg-emerald-950 flex flex-col items-center justify-center p-4 fixed inset-0 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full border border-slate-200 p-6 text-center">
+            <div className="w-10 h-10 mx-auto mb-3 relative">
+              <div className="absolute inset-0 rounded-full border-4 border-indigo-200" />
+              <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-indigo-600 animate-spin" />
+            </div>
+            <p className="text-sm text-slate-700 font-semibold">Connecting to room {mpSession.code}…</p>
+          </div>
+        </div>
+      );
+    }
+    if (mpRoom && mpRoom.phase === 'lobby') {
+      return (
+        <Lobby
+          room={mpRoom}
+          onToggleReady={handleToggleReady}
+          onStart={handleMpStart}
+          onLeave={handleMpLeave} />
+      );
+    }
+    if (mpRoom && mpRoom.phase === 'waiting') {
+      return <MultiplayerWaiting players={mpRoom.players} selfId={mpRoom.selfId} />;
+    }
+    if (mpRoom && mpRoom.phase === 'results') {
+      return (
+        <MultiplayerResults
+          players={mpRoom.players}
+          selfId={mpRoom.selfId}
+          onPlayAgain={handleMpPlayAgain}
+          onBackToMenu={handleMpLeave} />
+      );
+    }
+
     const today = todayDateStr();
     const dailyScore = getDailyScore(today);
     const onShareDailyFromMenu = async () => {
@@ -407,6 +567,9 @@ export default function App() {
         bestScores={bestScores}
         dailyScore={dailyScore}
         onShareDaily={onShareDailyFromMenu}
+        initialJoinCode={initialRoomCode}
+        onCreateRoom={handleCreateRoom}
+        onJoinRoom={handleJoinRoom}
         onStart={(mode) => {
           updateSetting('mode', mode);
           // Classic ignores user settings and uses the baked-in preset.
