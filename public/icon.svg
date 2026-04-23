@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Emerald background matches the app chrome (bg-emerald-950) -->
+  <rect width="512" height="512" fill="#064e3b"/>
+
+  <defs>
+    <!-- Ceramic-ish radial gradients for each sphere — bright top-left gloss,
+         saturated midtone, darker edge — matches the in-game material feel. -->
+    <radialGradient id="coral" cx="38%" cy="32%" r="64%">
+      <stop offset="0%"  stop-color="#ffe4e6"/>
+      <stop offset="45%" stop-color="#f43f5e"/>
+      <stop offset="100%" stop-color="#881337"/>
+    </radialGradient>
+    <radialGradient id="amber" cx="38%" cy="32%" r="64%">
+      <stop offset="0%"  stop-color="#fef3c7"/>
+      <stop offset="45%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#78350f"/>
+    </radialGradient>
+    <radialGradient id="iris" cx="38%" cy="32%" r="64%">
+      <stop offset="0%"  stop-color="#e9d5ff"/>
+      <stop offset="45%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#3b0764"/>
+    </radialGradient>
+
+    <!-- Soft ground shadow the stack sits on. -->
+    <radialGradient id="ground-shadow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#000" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Ground shadow under the pyramid -->
+  <ellipse cx="256" cy="440" rx="200" ry="24" fill="url(#ground-shadow)"/>
+
+  <!-- Bottom row — two spheres, tangent so they read as stacked pieces. -->
+  <circle cx="166" cy="334" r="90" fill="url(#coral)"/>
+  <circle cx="346" cy="334" r="90" fill="url(#amber)"/>
+
+  <!-- Apex sphere resting in the "V" between the two below. -->
+  <circle cx="256" cy="178" r="90" fill="url(#iris)"/>
+</svg>

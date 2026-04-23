@@ -3,8 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#065f46" />
+
+    <!-- Address bar color on mobile Chrome / PWA status bar on Android. Matches
+         the app's emerald chrome so there's no visual seam when installed. -->
+    <meta name="theme-color" content="#064e3b" />
+
+    <!-- iOS-specific: tell Safari this is a web app and how to treat it when
+         added to the home screen. The apple-touch-icon is produced by the
+         asset generator from public/icon.svg. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Spheroids" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
+
+    <!-- Favicon (generator produces .ico + svg variants) -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+
     <title>Spheroids</title>
+    <meta name="description" content="3D sphere-stacking puzzle game. Classic, Escalation, Daily, and head-to-head multiplayer." />
   </head>
   <body>
     <div id="root"></div>

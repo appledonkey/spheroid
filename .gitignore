@@ -15,3 +15,11 @@ dist-ssr
 
 # PartyKit local dev cache
 .partykit
+
+# vite-plugin-pwa dev service worker output (regenerated on each dev start)
+dev-dist
+
+# TypeScript incremental build artifacts + emitted JS for vite.config
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
