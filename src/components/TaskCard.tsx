@@ -200,16 +200,21 @@ export function TaskCard({ task, status, dealIndex }: TaskCardProps) {
     }
 
     if (task.type === 'TOUCH' || task.type === 'NO_TOUCH') {
+      // TOUCH = solid connector between the balls (they're "joined").
+      // NO_TOUCH = three short dashes with gaps (the connection is "broken").
+      // The visual language keeps the op in the same space but communicates
+      // the rule through line integrity rather than a bar vs cross.
       const op = task.type === 'TOUCH'
-        ? <div className="task-op-touch bg-emerald-500 rounded-full shrink-0" />
+        ? <div className="task-op-line bg-emerald-500 rounded-full shrink-0" />
         : (
-          <div className="task-op-cross relative flex items-center justify-center shrink-0">
-            <div className="task-op-cross-bar absolute bg-rose-500 rotate-45" />
-            <div className="task-op-cross-bar absolute bg-rose-500 -rotate-45" />
+          <div className="flex items-center gap-[3px] shrink-0">
+            <div className="task-op-dash bg-rose-500 rounded-full" />
+            <div className="task-op-dash bg-rose-500 rounded-full" />
+            <div className="task-op-dash bg-rose-500 rounded-full" />
           </div>
         );
       return (
-        <div className="flex items-center justify-center h-full gap-2">
+        <div className="flex items-center justify-center h-full gap-1.5">
           <Sphere c={task.c1} />
           {op}
           <Sphere c={task.c2} />

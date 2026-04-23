@@ -227,15 +227,17 @@ body {
 .task-num-inset {
   font-size: clamp(12px, 24cqh, 22px);
 }
-.task-op-touch {
-  width: clamp(10px, 14cqh, 18px);
-  height: clamp(4px, 5cqh, 6px);
+/* Solid connector between two balls on a TOUCH card — reads as "these
+   are joined." Longer than the old task-op-touch so it visually bridges
+   the gap between the two balls. */
+.task-op-line {
+  width: clamp(16px, 24cqh, 30px);
+  height: clamp(3px, 4cqh, 5px);
 }
-.task-op-cross {
-  width: clamp(12px, 18cqh, 22px);
-  height: clamp(12px, 18cqh, 22px);
-}
-.task-op-cross-bar {
-  width: clamp(16px, 24cqh, 28px);
-  height: clamp(2px, 3cqh, 3px);
+/* One dash segment of the NO_TOUCH broken line. Three of these in a row,
+   spaced with a small gap, make the "line-with-breaks" rendering that
+   communicates the rule without resorting to a cross icon. */
+.task-op-dash {
+  width: clamp(5px, 7cqh, 9px);
+  height: clamp(3px, 4cqh, 5px);
 }
