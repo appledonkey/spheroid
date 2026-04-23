@@ -106,6 +106,15 @@ function invalid(): void {
   playTone({ frequency: 140, duration: 0.12, type: 'sawtooth', volume: 0.18, frequencyEnd: 100 });
 }
 
+// Task-card verdict stamps at the round recap. Pass = crisp high blip,
+// fail = short buzz. Fire staggered per card for a "chk-chk-chk" rhythm.
+function cardPass(): void {
+  playTone({ frequency: 880, duration: 0.08, type: 'triangle', volume: 0.14 });
+}
+function cardFail(): void {
+  playTone({ frequency: 200, duration: 0.09, type: 'sawtooth', volume: 0.14, frequencyEnd: 140 });
+}
+
 // Sphere removed — slightly lower, faster decay.
 function remove(): void {
   playTone({ frequency: 360, duration: 0.08, type: 'triangle', volume: 0.18, frequencyEnd: 260 });
@@ -186,6 +195,8 @@ export const sfx = {
   place,
   remove,
   invalid,
+  cardPass,
+  cardFail,
   countdownTick,
   go,
   warning,

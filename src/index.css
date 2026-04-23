@@ -93,6 +93,56 @@ body {
   animation: score-delta-float 1.5s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
 }
 
+/* Task card — live-pass flash. Fires when status transitions to live-pass
+   (placement just satisfied the rule). Green halo pulses briefly and the
+   card gives a small scale bump — short enough to not be distracting at
+   high placement rates, long enough to register. */
+@keyframes task-live-pass {
+  0%   { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); transform: scale(1); }
+  30%  { box-shadow: 0 0 14px 3px rgba(16, 185, 129, 0.55); transform: scale(1.05); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); transform: scale(1); }
+}
+.animate-task-live-pass {
+  animation: task-live-pass 0.45s ease-out;
+}
+
+/* Task card — live-fail flash. Subtle red tint + quick horizontal shake. */
+@keyframes task-live-fail {
+  0%, 100% { transform: translateX(0); box-shadow: 0 0 0 0 rgba(225, 29, 72, 0); }
+  20%, 60% { transform: translateX(-3px); box-shadow: 0 0 10px 2px rgba(225, 29, 72, 0.35); }
+  40%, 80% { transform: translateX(3px); box-shadow: 0 0 10px 2px rgba(225, 29, 72, 0.35); }
+}
+.animate-task-live-fail {
+  animation: task-live-fail 0.35s ease-out;
+}
+
+/* Task card — recap stamp for a passed verdict. Scales up from small with
+   a slight rotate, overshoots, settles. Fires at round_over / game_over when
+   the card's status flips to 'pass'. Staggered per card by the caller. */
+@keyframes task-stamp-pass {
+  0%   { transform: scale(0.4) rotate(-10deg); opacity: 0.25; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  50%  { transform: scale(1.15) rotate(3deg); opacity: 1; box-shadow: 0 0 20px 5px rgba(16, 185, 129, 0.55); }
+  100% { transform: scale(1) rotate(0); opacity: 1; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+.animate-task-stamp-pass {
+  animation: task-stamp-pass 0.6s cubic-bezier(0.3, 1.2, 0.5, 1) backwards;
+}
+
+/* Task card — recap stamp for a failed verdict. Stamps in with an angry
+   shake. */
+@keyframes task-stamp-fail {
+  0%   { transform: scale(0.4); opacity: 0.25; box-shadow: 0 0 0 0 rgba(225, 29, 72, 0); }
+  45%  { transform: scale(1.1); opacity: 1; box-shadow: 0 0 16px 4px rgba(225, 29, 72, 0.45); }
+  60%  { transform: translateX(-5px) scale(1); }
+  72%  { transform: translateX(5px) scale(1); }
+  82%  { transform: translateX(-3px) scale(1); }
+  92%  { transform: translateX(2px) scale(1); }
+  100% { transform: translateX(0) scale(1); box-shadow: 0 0 0 0 rgba(225, 29, 72, 0); }
+}
+.animate-task-stamp-fail {
+  animation: task-stamp-fail 0.7s cubic-bezier(0.3, 1.2, 0.5, 1) backwards;
+}
+
 /* Countdown overlay digit — pop in, hold, fade out. Duration matches tick. */
 @keyframes countdown-pop {
   0%   { transform: scale(0.4); opacity: 0; }

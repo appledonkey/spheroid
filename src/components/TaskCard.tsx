@@ -1,6 +1,7 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { COLORS, COLOR_GRADIENTS, sphereGradientStyle } from '../constants/colors';
 import { describeTask } from '../game/rules';
+import { sfx } from '../audio/sfx';
 import type { Color, Task, TaskStatus } from '../types';
 
 // ---------- Ball primitives ----------
@@ -148,10 +149,45 @@ export type TaskCardProps = {
 // Kept in sync with App.tsx's pre-round scheduling (DEAL_STAGGER_MS constant).
 const DEAL_STAGGER_MS = 200;
 
+// Per-card stagger for the round-end stamp. Smaller than the deal-in stagger
+// because the recap moment is higher-urgency — users want their score fast.
+const STAMP_STAGGER_MS = 110;
+
 export function TaskCard({ task, status, dealIndex }: TaskCardProps) {
   // Tap the card to flip it over and see the rule in plain English. Tap
   // again to flip back. Each card manages its own flip state independently.
   const [flipped, setFlipped] = useState(false);
+
+  // Transient animation class driven by status transitions. `null` is the
+  // resting state; any non-null value applies the corresponding animation.
+  // Cleared by onAnimationEnd below.
+  type Fx = 'live-pass' | 'live-fail' | 'stamp-pass' | 'stamp-fail' | null;
+  const [fx, setFx] = useState<Fx>(null);
+  const prevStatusRef = useRef<TaskStatus>(status);
+
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = status;
+    if (prev === status) return;
+    // Round-end verdict — stagger so cards stamp in sequence rather than
+    // all at once. Caller drives the visual order via dealIndex. Each stamp
+    // fires a short chime/thud so the recap has an audible rhythm.
+    if (status === 'pass' || status === 'fail') {
+      const delay = (dealIndex ?? 0) * STAMP_STAGGER_MS;
+      const t = setTimeout(() => {
+        setFx(status === 'pass' ? 'stamp-pass' : 'stamp-fail');
+        if (status === 'pass') sfx.cardPass();
+        else sfx.cardFail();
+      }, delay);
+      return () => clearTimeout(t);
+    }
+    // Live-status flip during play — flash without delay.
+    if (status === 'live-pass' && prev !== 'live-pass') {
+      setFx('live-pass');
+    } else if (status === 'live-fail' && prev !== 'live-fail') {
+      setFx('live-fail');
+    }
+  }, [status, dealIndex]);
 
   const renderIcon = () => {
     if (task.type === 'EXACT') {
@@ -216,6 +252,14 @@ export function TaskCard({ task, status, dealIndex }: TaskCardProps) {
   if (status === 'pass') cls = 'border-emerald-500 bg-emerald-50';
   if (status === 'fail') cls = 'border-rose-500 bg-rose-50';
 
+  // Map fx state → animation class. One active class at a time; onAnimationEnd
+  // clears it so the next transition can re-fire.
+  const fxClass = fx === 'live-pass'   ? 'animate-task-live-pass'
+                 : fx === 'live-fail'  ? 'animate-task-live-fail'
+                 : fx === 'stamp-pass' ? 'animate-task-stamp-pass'
+                 : fx === 'stamp-fail' ? 'animate-task-stamp-fail'
+                 : '';
+
   return (
     <div
       // Outer wrapper owns the grid-cell size, the deal-in animation, and
@@ -233,7 +277,14 @@ export function TaskCard({ task, status, dealIndex }: TaskCardProps) {
 
         {/* Front — icon */}
         <div
-          className={`task-card absolute inset-0 px-1.5 py-1 rounded-lg border-2 shadow-sm flex flex-col items-center justify-center transition-colors [backface-visibility:hidden] ${cls}`}>
+          onAnimationEnd={(e) => {
+            // Only clear for our own fx animations, not deal-in or CSS
+            // transitions bubbling up from children.
+            if (e.animationName.startsWith('task-live-') || e.animationName.startsWith('task-stamp-')) {
+              setFx(null);
+            }
+          }}
+          className={`task-card absolute inset-0 px-1.5 py-1 rounded-lg border-2 shadow-sm flex flex-col items-center justify-center transition-colors [backface-visibility:hidden] ${cls} ${fxClass}`}>
           {renderIcon()}
           {status === 'fail' && <span className="text-rose-600 font-bold mt-0.5 text-xs">−2</span>}
           {status === 'live-pass' && (
