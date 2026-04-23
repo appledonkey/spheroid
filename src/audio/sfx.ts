@@ -85,9 +85,25 @@ function playChord(
 
 // ---------- Sound vocabulary ----------
 
-// Sphere placed — quick soft click.
-function place(): void {
-  playTone({ frequency: 620, duration: 0.09, type: 'triangle', volume: 0.25, frequencyEnd: 420 });
+// Sphere placed — quick soft click. Layer shifts the pitch so the pyramid
+// feels like it's climbing: base = low woody thud, mid = middle click, apex
+// = bright bell. Multiplies the base frequency by ~1.25 per layer.
+function place(layer: 0 | 1 | 2 = 0): void {
+  const base = 520;
+  const multiplier = 1 + layer * 0.35;
+  playTone({
+    frequency: base * multiplier,
+    duration: 0.09,
+    type: 'triangle',
+    volume: 0.25,
+    frequencyEnd: (base - 200) * multiplier,
+  });
+}
+
+// Invalid placement — short low dull thud to signal "nope, can't go there"
+// without being annoying. Paired with a red slot flash in Board3D.
+function invalid(): void {
+  playTone({ frequency: 140, duration: 0.12, type: 'sawtooth', volume: 0.18, frequencyEnd: 100 });
 }
 
 // Sphere removed — slightly lower, faster decay.
@@ -169,6 +185,7 @@ function newBest(): void {
 export const sfx = {
   place,
   remove,
+  invalid,
   countdownTick,
   go,
   warning,

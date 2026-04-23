@@ -19,6 +19,9 @@ function vib(pattern: number | number[]): void {
 export const haptics = {
   place: () => vib(10),
   remove: () => vib(6),
+  // Double-pulse for invalid — distinct from place's single pulse so you can
+  // tell by feel alone that the tap didn't land.
+  invalid: () => vib([8, 30, 8]),
   countdownTick: () => vib(14),
   go: () => vib(55),
   warning: () => vib([40, 30, 40]),

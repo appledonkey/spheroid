@@ -4,6 +4,7 @@ import { COLOR_GRADIENTS } from '../constants/colors';
 import { NUM_SLOTS, POSITIONS_3D } from '../constants/geometry';
 import { checkPlacementRules, showEmptySlot } from '../game/rules';
 import type { Board, Color, GameState } from '../types';
+import { SLOT_LAYER } from '../constants/geometry';
 
 export type Board3DProps = {
   board: Board;
@@ -11,25 +12,91 @@ export type Board3DProps = {
   gameState: GameState;
   onSlotClick: (id: number) => void;
   lastPlaced: number | null;
+  // When the user taps a slot that can't accept a placement (rules fail), this
+  // is set to that slot id briefly — drives the red shake + flash. Clears
+  // back to null after the visual fires.
+  lastInvalid: number | null;
 };
 
 type SceneRefs = {
+  scene: THREE.Scene;
+  shockwaveGeo: THREE.BufferGeometry;
   sphereMeshes: Record<number, THREE.Mesh>;
   ghostMeshes: Record<number, THREE.Mesh>;
   slotMaterials: Record<number, THREE.MeshStandardMaterial>;
-  lastSeen: { lastPlaced: number | null };
+  // Shockwave rings spawned at the landing point of each placement. One per
+  // placement; GC'd after the animation finishes.
+  shockwaves: { mesh: THREE.Mesh; startedAt: number }[];
+  // The slot showing an invalid-placement shake, if any. Looked up each
+  // frame in the RAF loop.
+  invalidSlot: { id: number; startedAt: number } | null;
+  lastSeen: { lastPlaced: number | null; lastInvalid: number | null };
 };
 
 const DRAG_THRESHOLD = 6;
 const PLACEMENT_ANIM_SECONDS = 0.5;
+// Drop height (world units) — ball starts this much above its resting spot
+// and falls into it. Kept small so it doesn't hide the stack above.
+const PLACEMENT_DROP_HEIGHT = 0.9;
+// Shockwave ring expands from the landing point + fades out over this long.
+const SHOCKWAVE_ANIM_SECONDS = 0.45;
+// How long an invalid-slot shake / red flash lasts.
+const INVALID_ANIM_SECONDS = 0.32;
 
+// Uniform scale over the placement animation — slight squash on impact,
+// tiny overshoot, settle. Unchanged from before, isolated from the Y drop.
 function placementScale(elapsed: number): number {
   const t = elapsed / PLACEMENT_ANIM_SECONDS;
   if (t >= 1) return 1;
-  if (t < 0.35) return 0.4 + (1.3 - 0.4) * (t / 0.35);
-  if (t < 0.65) return 1.3 + (0.92 - 1.3) * ((t - 0.35) / 0.30);
-  if (t < 0.85) return 0.92 + (1.05 - 0.92) * ((t - 0.65) / 0.20);
-  return 1.05 + (1.0 - 1.05) * ((t - 0.85) / 0.15);
+  if (t < 0.35) return 0.55 + (1.0 - 0.55) * (t / 0.35);   // grow toward full
+  if (t < 0.55) return 1.0 + (1.18 - 1.0) * ((t - 0.35) / 0.20); // impact overshoot
+  if (t < 0.80) return 1.18 + (0.96 - 1.18) * ((t - 0.55) / 0.25); // settle down
+  return 0.96 + (1.0 - 0.96) * ((t - 0.80) / 0.20);        // back to rest
+}
+
+// Squash factors: during impact the ball compresses vertically and spreads
+// horizontally, then snaps back. Adds a noticeable "thud" without the ball
+// looking rubbery.
+function placementSquash(elapsed: number): { xz: number; y: number } {
+  const t = elapsed / PLACEMENT_ANIM_SECONDS;
+  if (t >= 1) return { xz: 1, y: 1 };
+  // Pre-impact (falling): tall & thin (anticipation)
+  if (t < 0.35) {
+    const k = t / 0.35;
+    return { xz: 1 - 0.10 * k, y: 1 + 0.14 * k };
+  }
+  // Impact: squashed flat (wide & short)
+  if (t < 0.55) {
+    const k = (t - 0.35) / 0.20;
+    return { xz: 0.90 + 0.28 * k, y: 1.14 - 0.36 * k };
+  }
+  // Settle: bounce back
+  if (t < 0.80) {
+    const k = (t - 0.55) / 0.25;
+    return { xz: 1.18 - 0.22 * k, y: 0.78 + 0.26 * k };
+  }
+  const k = (t - 0.80) / 0.20;
+  return { xz: 0.96 + 0.04 * k, y: 1.04 - 0.04 * k };
+}
+
+// Drop offset: ball starts at +DROP_HEIGHT and eases to 0 (resting). Quartic
+// easing in for a heavier "fall" feel. Returns 0 at/after impact.
+function placementDropY(elapsed: number): number {
+  const t = elapsed / PLACEMENT_ANIM_SECONDS;
+  if (t >= 0.35) return 0;
+  const k = t / 0.35; // 0..1 over the fall
+  // Ease-in quart: starts slow, accelerates
+  const eased = k * k * k * k;
+  return PLACEMENT_DROP_HEIGHT * (1 - eased);
+}
+
+// Red-slot shake easing for invalid attempts. Returns a small horizontal
+// offset that oscillates quickly and decays.
+function invalidShakeX(elapsed: number): number {
+  const t = elapsed / INVALID_ANIM_SECONDS;
+  if (t >= 1) return 0;
+  const amplitude = 0.08 * (1 - t);
+  return Math.sin(t * Math.PI * 8) * amplitude;
 }
 
 // Procedural walnut-grain texture. Horizontal wavy grain bands on a warm
@@ -85,7 +152,7 @@ function createWoodTexture(): THREE.CanvasTexture {
 }
 
 export function Board3D(props: Board3DProps) {
-  const { board, selectedColor, lastPlaced } = props;
+  const { board, selectedColor, lastPlaced, lastInvalid } = props;
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<SceneRefs | null>(null);
 
@@ -442,25 +509,47 @@ export function Board3D(props: Board3DProps) {
     const ro = new ResizeObserver(onResize);
     ro.observe(mount);
 
+    // Shockwave visuals live in a shared ring geometry to keep the per-placement
+    // cost cheap. We allocate meshes lazily and recycle via the scene refs.
+    const shockwaveGeo = new THREE.RingGeometry(0.45, 0.52, 36);
+    // Rings lie flat on the board (rotate -90° on X like the slot insets).
+    shockwaveGeo.rotateX(-Math.PI / 2);
+
     let rafId = 0;
     const animate = () => {
       rafId = requestAnimationFrame(animate);
       const now = Date.now();
 
       Object.values(sphereMeshes).forEach(m => {
-        if (m.visible && m.userData.placedAt) {
+        if (!m.visible) return;
+        const slotId = m.userData.slotId as number;
+        const restY = POSITIONS_3D[slotId][1];
+
+        // Placement drop + squash animation — Y position drops into the
+        // resting spot while the ball goes through a small squash + overshoot.
+        if (m.userData.placedAt) {
           const elapsed = (now - m.userData.placedAt) / 1000;
           if (elapsed < PLACEMENT_ANIM_SECONDS) {
-            m.scale.setScalar(placementScale(elapsed));
-          } else if (m.scale.x !== 1) {
-            m.scale.setScalar(1);
+            const s = placementScale(elapsed);
+            const sq = placementSquash(elapsed);
+            m.scale.set(s * sq.xz, s * sq.y, s * sq.xz);
+            m.position.y = restY + placementDropY(elapsed);
+          } else if (m.scale.x !== 1 || m.position.y !== restY) {
+            m.scale.set(1, 1, 1);
+            m.position.y = restY;
+            m.userData.placedAt = 0;
           }
         }
       });
 
-      const t = (now % 1400) / 1400;
-      const pulseO = 0.4 + 0.25 * Math.sin(t * Math.PI * 2);
-      const pulseS = 0.95 + 0.05 * Math.sin(t * Math.PI * 2);
+      // Valid-target pulse — stronger amplitude on both opacity and scale so
+      // the slot actively calls attention when a color is selected. Ghosts
+      // without a valid-target flag stay at a static low opacity (set in the
+      // sync effect below).
+      const t = (now % 1100) / 1100;
+      const phase = Math.sin(t * Math.PI * 2);
+      const pulseO = 0.55 + 0.3 * phase;
+      const pulseS = 0.94 + 0.08 * phase;
       Object.values(ghostMeshes).forEach(g => {
         if (g.userData.isValidTarget) {
           (g.material as THREE.MeshBasicMaterial).opacity = pulseO;
@@ -468,13 +557,64 @@ export function Board3D(props: Board3DProps) {
         }
       });
 
+      // Shockwave rings: scale up + fade out over their lifetime.
+      const refs = sceneRef.current;
+      if (refs) {
+        for (let i = refs.shockwaves.length - 1; i >= 0; i--) {
+          const sw = refs.shockwaves[i];
+          const elapsed = (now - sw.startedAt) / 1000;
+          if (elapsed >= SHOCKWAVE_ANIM_SECONDS) {
+            scene.remove(sw.mesh);
+            (sw.mesh.material as THREE.Material).dispose();
+            refs.shockwaves.splice(i, 1);
+            continue;
+          }
+          const k = elapsed / SHOCKWAVE_ANIM_SECONDS;
+          const scale = 0.4 + 3.2 * k;
+          sw.mesh.scale.set(scale, 1, scale);
+          (sw.mesh.material as THREE.MeshBasicMaterial).opacity = 0.75 * (1 - k);
+        }
+
+        // Invalid-slot shake + red flash. Shakes the ghost mesh at that slot
+        // (or the sphere mesh if occupied, though invalid tends to mean empty).
+        if (refs.invalidSlot) {
+          const elapsed = (now - refs.invalidSlot.startedAt) / 1000;
+          const slotId = refs.invalidSlot.id;
+          const ghost = ghostMeshes[slotId];
+          const pos0 = POSITIONS_3D[slotId];
+          if (elapsed >= INVALID_ANIM_SECONDS) {
+            refs.invalidSlot = null;
+            if (ghost) {
+              ghost.position.x = pos0[0];
+              (ghost.material as THREE.MeshBasicMaterial).color.set(0x94a3b8);
+            }
+          } else if (ghost) {
+            const dx = invalidShakeX(elapsed);
+            ghost.position.x = pos0[0] + dx;
+            // Flash red, fade back to grey.
+            const k = 1 - elapsed / INVALID_ANIM_SECONDS;
+            const r = 0.58 + 0.42 * k;  // grey to red
+            const g = 0.65 - 0.45 * k;
+            const b = 0.72 - 0.55 * k;
+            (ghost.material as THREE.MeshBasicMaterial).color.setRGB(r, g, b);
+            // Make sure the ghost is visible even if the slot isn't a valid target
+            // (so you get feedback when clicking a slot that needs supports).
+            ghost.visible = true;
+            (ghost.material as THREE.MeshBasicMaterial).opacity = 0.55 * k + 0.15;
+          }
+        }
+      }
+
       renderer.render(scene, camera);
     };
     animate();
 
     sceneRef.current = {
+      scene, shockwaveGeo,
       sphereMeshes, ghostMeshes, slotMaterials,
-      lastSeen: { lastPlaced: null },
+      shockwaves: [],
+      invalidSlot: null,
+      lastSeen: { lastPlaced: null, lastInvalid: null },
     };
 
     return () => {
@@ -499,6 +639,7 @@ export function Board3D(props: Board3DProps) {
       woodTex.dispose();
       slotInsetGeo.dispose();
       slotInsetMat.dispose();
+      shockwaveGeo.dispose();
       Object.values(slotMaterials).forEach(m => m.dispose());
       Object.values(ghostMeshes).forEach(g => (g.material as THREE.Material).dispose());
       renderer.dispose();
@@ -516,8 +657,33 @@ export function Board3D(props: Board3DProps) {
         m.userData.placedAt = Date.now();
         m.scale.setScalar(0.4);
       }
+      // Spawn a shockwave ring at the landing spot. Colour shifts subtly on
+      // the apex (layer 2) to reward stacking to the top. Ring mesh is
+      // owned/disposed by the RAF loop when it fades out.
+      const pos = POSITIONS_3D[lastPlaced];
+      const layer = SLOT_LAYER[lastPlaced];
+      const ringColor = layer === 2 ? 0xfde68a : 0xffffff;
+      const ringMat = new THREE.MeshBasicMaterial({
+        color: ringColor,
+        transparent: true,
+        opacity: 0.75,
+        depthWrite: false,
+      });
+      const ring = new THREE.Mesh(s.shockwaveGeo, ringMat);
+      // Place the ring just above the board surface, under the ball.
+      ring.position.set(pos[0], pos[1] - 0.48, pos[2]);
+      ring.renderOrder = 2;
+      s.scene.add(ring);
+      s.shockwaves.push({ mesh: ring, startedAt: Date.now() });
     }
     s.lastSeen.lastPlaced = lastPlaced;
+
+    // Invalid placement: the app sets lastInvalid to the slot id briefly;
+    // we note the start time so the RAF loop can animate the shake + flash.
+    if (lastInvalid !== null && lastInvalid !== s.lastSeen.lastInvalid) {
+      s.invalidSlot = { id: lastInvalid, startedAt: Date.now() };
+    }
+    s.lastSeen.lastInvalid = lastInvalid;
 
     for (let id = 0; id < NUM_SLOTS; id++) {
       const color = board[id];
@@ -546,7 +712,7 @@ export function Board3D(props: Board3DProps) {
         }
       }
     }
-  }, [board, selectedColor, lastPlaced]);
+  }, [board, selectedColor, lastPlaced, lastInvalid]);
 
   const zoomBy = (factor: number) => {
     applyZoomRef.current(zoomRef.current * factor);

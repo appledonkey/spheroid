@@ -3,7 +3,7 @@ import type {
   Board, Color, GameState, Inventory as InventoryType,
   RoundResult as RoundResultType, Settings, Task, TaskStatus,
 } from './types';
-import { NUM_SLOTS } from './constants/geometry';
+import { NUM_SLOTS, SLOT_LAYER } from './constants/geometry';
 import { checkPlacementRules, checkRemovalRules, evaluateTask, liveTaskStatus } from './game/rules';
 import { CLASSIC_PRESET, cardsForRound, generateTasks, roundSeed } from './game/tasks';
 import { convertBonusTokens, scoreRound } from './game/scoring';
@@ -57,6 +57,9 @@ export default function App() {
   const [selectedColor, setSelectedColor] = useState<Color | null>(null);
   const [roundResult, setRoundResult] = useState<RoundResultType | null>(null);
   const [lastPlaced, setLastPlaced] = useState<number | null>(null);
+  // Transient — set when the user taps a slot that rejected the placement.
+  // Drives the red shake/flash in Board3D. Cleared after the animation.
+  const [lastInvalid, setLastInvalid] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [countdown, setCountdown] = useState(COUNTDOWN_START);
   // Brief "Time's up!" overlay between timer-hits-0 and the recap showing.
@@ -353,6 +356,15 @@ export default function App() {
     setTimeout(() => setLastPlaced(null), PLACEMENT_FX_DURATION_MS);
   };
 
+  const flagInvalid = useCallback((id: number) => {
+    setLastInvalid(id);
+    sfx.invalid();
+    haptics.invalid();
+    // Must clear to null so a second tap on the same slot retriggers the
+    // animation (otherwise the prop won't change and the scene won't see it).
+    setTimeout(() => setLastInvalid(prev => (prev === id ? null : prev)), 380);
+  }, []);
+
   const handleSlotClick = useCallback((id: number) => {
     if (gameState !== 'playing') return;
     const current = board[id];
@@ -363,6 +375,8 @@ export default function App() {
         setInventory(p => ({ ...p, [current]: p[current] + 1 }));
         haptics.remove();
         sfx.remove();
+      } else {
+        flagInvalid(id);
       }
     } else if (selectedColor && inventory[selectedColor] > 0) {
       if (checkPlacementRules(id, board)) {
@@ -370,10 +384,17 @@ export default function App() {
         setBoard(nb);
         setInventory(p => ({ ...p, [selectedColor]: p[selectedColor] - 1 }));
         triggerPlaceFx(id);
-        sfx.place();
+        // Base/mid/apex layer drives the pitch — the pyramid audibly climbs.
+        sfx.place(SLOT_LAYER[id] as 0 | 1 | 2);
+      } else {
+        flagInvalid(id);
       }
+    } else {
+      // Tapped an empty slot with no color selected (or out of inventory).
+      // Still worth the nudge — it tells the user "pick a color first".
+      flagInvalid(id);
     }
-  }, [gameState, board, selectedColor, inventory]);
+  }, [gameState, board, selectedColor, inventory, flagInvalid]);
 
   const nextRound = () => { const next = round + 1; setRound(next); startRound(next); };
   const restartGame = () => {
@@ -711,6 +732,7 @@ export default function App() {
             gameState={gameState}
             onSlotClick={handleSlotClick}
             lastPlaced={lastPlaced}
+            lastInvalid={lastInvalid}
           />
           {gameState === 'playing' && !selectedColor && board.every(s => s === null) && (
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-slate-900/85 text-white text-xs font-semibold px-3 py-1.5 rounded-full pointer-events-none">
