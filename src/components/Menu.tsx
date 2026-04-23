@@ -3,7 +3,6 @@ import type { EscalationGrowth, GameMode, Settings } from '../types';
 import type { UpdateSetting } from '../hooks/useSettings';
 import { SETTINGS_RANGES } from '../storage/settings';
 import { CLASSIC_PRESET, MAX_TASKS } from '../game/tasks';
-import type { BestScores } from '../storage/scores';
 import { ModeToggle } from './ModeToggle';
 import { SettingRow } from './SettingRow';
 import { HowToView } from './HowToView';
@@ -18,7 +17,6 @@ export type MenuProps = {
   onUpdateSetting: UpdateSetting;
   onStart: (mode: GameMode) => void;
   onStartDaily: () => void;
-  bestScores: BestScores;
   // null = not played today; number = today's score. Drives the daily button's
   // label and whether tapping it starts a run or shows the "come back tomorrow" view.
   dailyScore: number | null;
@@ -34,7 +32,7 @@ export type MenuProps = {
 };
 
 export function Menu({
-  settings, onUpdateSetting, onStart, onStartDaily, bestScores, dailyScore, onShareDaily,
+  settings, onUpdateSetting, onStart, onStartDaily, dailyScore, onShareDaily,
   onCreateRoom, onJoinRoom, initialJoinCode,
 }: MenuProps) {
   const [view, setView] = useState<View>(initialJoinCode ? 'mp-join' : 'title');
@@ -50,8 +48,6 @@ export function Menu({
          style={{ touchAction: 'none', overscrollBehavior: 'none' }}>
       {view === 'title' && (
         <TitleView
-          totalRounds={settings.totalRounds}
-          bestScores={bestScores}
           dailyScore={dailyScore}
           onPlay={() => setView('mode-chooser')}
           onDaily={() => {
@@ -111,8 +107,6 @@ export function Menu({
 }
 
 type TitleViewProps = {
-  totalRounds: number;
-  bestScores: BestScores;
   dailyScore: number | null;
   onPlay: () => void;
   onDaily: () => void;
@@ -120,24 +114,11 @@ type TitleViewProps = {
   onOpenHowTo: () => void;
 };
 
-function TitleView({ totalRounds, bestScores, dailyScore, onPlay, onDaily, onPlayWithFriends, onOpenHowTo }: TitleViewProps) {
-  const hasAnyBest = bestScores.classic !== null || bestScores.escalation !== null;
+function TitleView({ dailyScore, onPlay, onDaily, onPlayWithFriends, onOpenHowTo }: TitleViewProps) {
   const playedToday = dailyScore !== null;
   return (
     <>
-      <h1 className="text-5xl font-bold text-outlined mb-2 tracking-tight">Spheroids</h1>
-      <p className="text-outlined-thin mb-4 text-sm font-semibold">Stack. Score. Survive {totalRounds} rounds.</p>
-
-      {hasAnyBest && (
-        <div className="flex items-center gap-2 mb-6">
-          {bestScores.classic !== null && (
-            <BestBadge label="Classic" value={bestScores.classic} />
-          )}
-          {bestScores.escalation !== null && (
-            <BestBadge label="Escalation" value={bestScores.escalation} />
-          )}
-        </div>
-      )}
+      <h1 className="text-5xl font-bold text-outlined mb-6 tracking-tight">Spheroids</h1>
 
       <div className="bg-white p-6 rounded-2xl shadow-xl max-w-md w-full border border-slate-200 space-y-3">
         <button
@@ -249,15 +230,6 @@ function DailyIcon() {
       <rect x="3" y="5" width="18" height="16" rx="2" />
       <path d="M16 3v4M8 3v4M3 10h18" />
     </svg>
-  );
-}
-
-function BestBadge({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="bg-emerald-900/60 border border-emerald-700 px-3 py-1 rounded-full text-xs font-semibold text-emerald-100 flex items-center gap-1.5">
-      <span className="uppercase tracking-wider text-[10px] text-emerald-300">Best {label}</span>
-      <span className="tabular-nums">{value}</span>
-    </div>
   );
 }
 

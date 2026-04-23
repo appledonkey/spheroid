@@ -630,7 +630,6 @@ export default function App() {
       <Menu
         settings={settings}
         onUpdateSetting={updateSetting}
-        bestScores={bestScores}
         dailyScore={dailyScore}
         onShareDaily={onShareDailyFromMenu}
         initialJoinCode={initialRoomCode}
