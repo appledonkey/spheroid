@@ -291,6 +291,14 @@ body {
   width: clamp(22px, 40cqh, 46px);
   height: clamp(22px, 40cqh, 46px);
 }
+/* Two-ball layouts (TOUCH, NO_TOUCH, MORE/LESS_THAN) use a smaller sphere
+   so the pair + op fit comfortably with real horizontal breathing room.
+   Keeps the composition balanced instead of the balls hugging the card
+   edges. */
+.task-sphere-duo {
+  width: clamp(20px, 32cqh, 38px);
+  height: clamp(20px, 32cqh, 38px);
+}
 .task-sphere-sm {
   width: clamp(18px, 30cqh, 38px);
   height: clamp(18px, 30cqh, 38px);

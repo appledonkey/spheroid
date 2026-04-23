@@ -7,8 +7,12 @@ import type { Color, Task, TaskStatus } from '../types';
 // ---------- Ball primitives ----------
 
 // One canonical sphere size for every "main" ball across every card type.
-const Sphere = ({ c }: { c: Color }) => (
-  <div className="task-sphere rounded-full shadow-md shrink-0"
+// Pass size='duo' on layouts that show two spheres side-by-side (TOUCH,
+// NO_TOUCH, MORE/LESS_THAN) — they share the card width with each other
+// plus an op, so a smaller sphere keeps the composition balanced.
+type SphereSize = 'solo' | 'duo';
+const Sphere = ({ c, size = 'solo' }: { c: Color; size?: SphereSize }) => (
+  <div className={`${size === 'duo' ? 'task-sphere-duo' : 'task-sphere'} rounded-full shadow-md shrink-0`}
        style={{ background: sphereGradientStyle(c) }} />
 );
 
@@ -220,11 +224,12 @@ export function TaskCard({ task, status, dealIndex }: TaskCardProps) {
         // Extra inner padding + a wider gap here — the two-ball layout was
         // pushing the spheres right to the card edges, which made the cards
         // feel cramped. px-3 pulls them inward, gap-2 gives the op visual
-        // room to breathe.
+        // room to breathe, and duo-sized spheres stay proportionally
+        // balanced with the op.
         <div className="flex items-center justify-center h-full gap-2 px-3">
-          <Sphere c={task.c1} />
+          <Sphere c={task.c1} size="duo" />
           {op}
-          <Sphere c={task.c2} />
+          <Sphere c={task.c2} size="duo" />
         </div>
       );
     }
@@ -240,13 +245,13 @@ export function TaskCard({ task, status, dealIndex }: TaskCardProps) {
     if (task.type === 'MORE_THAN' || task.type === 'LESS_THAN') {
       return (
         // Matches TOUCH/NO_TOUCH inner padding so all two-ball layouts have
-        // consistent edge breathing.
+        // consistent edge breathing. Duo-sized spheres for the same reason.
         <div className="flex items-center justify-center h-full gap-2 px-3">
-          <Sphere c={task.c1} />
+          <Sphere c={task.c1} size="duo" />
           <span className="font-bold task-num leading-none text-slate-800">
             {task.type === 'MORE_THAN' ? '>' : '<'}
           </span>
-          <Sphere c={task.c2} />
+          <Sphere c={task.c2} size="duo" />
         </div>
       );
     }
