@@ -20,6 +20,9 @@ export type MenuProps = {
   // null = not played today; number = today's score. Drives the daily button's
   // label and whether tapping it starts a run or shows the "come back tomorrow" view.
   dailyScore: number | null;
+  // Consecutive days played (ending today or yesterday). 0 = no active streak.
+  // Shown next to the Daily button to encourage coming back daily.
+  dailyStreak: number;
   // Called when the user shares from DailyDoneView — App knows the full
   // round history for building the spoiler-free grid.
   onShareDaily: () => void;
@@ -32,7 +35,7 @@ export type MenuProps = {
 };
 
 export function Menu({
-  settings, onUpdateSetting, onStart, onStartDaily, dailyScore, onShareDaily,
+  settings, onUpdateSetting, onStart, onStartDaily, dailyScore, dailyStreak, onShareDaily,
   onCreateRoom, onJoinRoom, initialJoinCode,
 }: MenuProps) {
   const [view, setView] = useState<View>(initialJoinCode ? 'mp-join' : 'title');
@@ -49,6 +52,7 @@ export function Menu({
       {view === 'title' && (
         <TitleView
           dailyScore={dailyScore}
+          dailyStreak={dailyStreak}
           onPlay={() => setView('mode-chooser')}
           onDaily={() => {
             if (dailyScore !== null) setView('daily-done');
@@ -108,13 +112,14 @@ export function Menu({
 
 type TitleViewProps = {
   dailyScore: number | null;
+  dailyStreak: number;
   onPlay: () => void;
   onDaily: () => void;
   onPlayWithFriends: () => void;
   onOpenHowTo: () => void;
 };
 
-function TitleView({ dailyScore, onPlay, onDaily, onPlayWithFriends, onOpenHowTo }: TitleViewProps) {
+function TitleView({ dailyScore, dailyStreak, onPlay, onDaily, onPlayWithFriends, onOpenHowTo }: TitleViewProps) {
   const playedToday = dailyScore !== null;
   return (
     <>
@@ -130,7 +135,7 @@ function TitleView({ dailyScore, onPlay, onDaily, onPlayWithFriends, onOpenHowTo
         <button
           onClick={onDaily}
           style={{ touchAction: 'manipulation' }}
-          className={`w-full font-bold py-3 px-4 rounded-xl transition-colors active:scale-[0.98] flex items-center justify-center gap-2 ${
+          className={`relative w-full font-bold py-3 px-4 rounded-xl transition-colors active:scale-[0.98] flex items-center justify-center gap-2 ${
             playedToday
               ? 'bg-emerald-100 text-emerald-900 border border-emerald-300 hover:bg-emerald-200'
               : 'bg-emerald-600 text-white hover:bg-emerald-500'
@@ -143,6 +148,13 @@ function TitleView({ dailyScore, onPlay, onDaily, onPlayWithFriends, onOpenHowTo
             </span>
           ) : (
             <>Daily Challenge</>
+          )}
+          {dailyStreak > 0 && (
+            <span
+              className="absolute -top-2 -right-2 bg-orange-500 text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-md ring-2 ring-emerald-950 flex items-center gap-0.5 tabular-nums"
+              title={`${dailyStreak}-day streak`}>
+              <span aria-hidden>🔥</span>{dailyStreak}
+            </span>
           )}
         </button>
         <button

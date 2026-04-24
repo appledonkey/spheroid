@@ -80,3 +80,31 @@ export function recordDaily(dateStr: string, score: number, rounds: DailyRoundEn
     // ignore
   }
 }
+
+// Returns YYYY-MM-DD for the day before `dateStr`. Uses UTC to avoid DST /
+// timezone edge cases where "yesterday" and "today" flip around a boundary.
+function dayBefore(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+// Current daily streak — number of consecutive days (ending with today or
+// yesterday) on which the player has recorded a daily score. Streak is
+// considered "alive" if yesterday was played and today hasn't been yet,
+// so the UI can encourage them to extend it ("play today to keep it!").
+// Returns 0 if the most recent play is older than yesterday.
+export function getDailyStreak(today: string = todayDateStr()): number {
+  const all = loadAll();
+  const yest = dayBefore(today);
+  // Anchor: the most recent valid day — either today or yesterday. Anything
+  // older means the streak has already broken.
+  let cursor = today in all ? today : yest in all ? yest : null;
+  if (cursor === null) return 0;
+  let streak = 0;
+  while (cursor && cursor in all) {
+    streak++;
+    cursor = dayBefore(cursor);
+  }
+  return streak;
+}

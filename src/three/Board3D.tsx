@@ -16,6 +16,11 @@ export type Board3DProps = {
   // is set to that slot id briefly — drives the red shake + flash. Clears
   // back to null after the visual fires.
   lastInvalid: number | null;
+  // Imperative hit test: returns the slot id under (clientX, clientY) or null
+  // if the pointer isn't over a slot. Populated inside Board3D's setup
+  // useEffect so external drag handlers can ask "what slot is the pointer
+  // on?" without rebuilding the 3D scene every render.
+  hitTestRef?: React.MutableRefObject<((clientX: number, clientY: number) => number | null) | null>;
 };
 
 type SceneRefs = {
@@ -152,7 +157,7 @@ function createWoodTexture(): THREE.CanvasTexture {
 }
 
 export function Board3D(props: Board3DProps) {
-  const { board, selectedColor, lastPlaced, lastInvalid } = props;
+  const { board, selectedColor, lastPlaced, lastInvalid, hitTestRef } = props;
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<SceneRefs | null>(null);
 
@@ -380,6 +385,30 @@ export function Board3D(props: Board3DProps) {
 
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
+
+    // Imperative hit-test for outside-the-canvas drag handlers. Returns the
+    // slot id under (clientX, clientY) or null. Uses the same raycaster the
+    // onPointerUp tap path uses, so we stay consistent on edge cases.
+    if (hitTestRef) {
+      hitTestRef.current = (clientX, clientY) => {
+        const rect = canvas.getBoundingClientRect();
+        if (
+          clientX < rect.left || clientX > rect.right ||
+          clientY < rect.top  || clientY > rect.bottom
+        ) return null;
+        pointer.set(
+          ((clientX - rect.left) / rect.width) * 2 - 1,
+          -((clientY - rect.top) / rect.height) * 2 + 1,
+        );
+        raycaster.setFromCamera(pointer, camera);
+        const targets: THREE.Object3D[] = [
+          ...Object.values(sphereMeshes).filter(m => m.visible),
+          ...Object.values(ghostMeshes).filter(m => m.visible),
+        ];
+        const hits = raycaster.intersectObjects(targets);
+        return hits.length > 0 ? (hits[0].object.userData.slotId as number) : null;
+      };
+    }
 
     // Pointer state — tap vs drag
     let activePointerId: number | null = null;
@@ -620,6 +649,7 @@ export function Board3D(props: Board3DProps) {
     return () => {
       cancelAnimationFrame(rafId);
       ro.disconnect();
+      if (hitTestRef) hitTestRef.current = null;
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointermove', onPointerMove);
       canvas.removeEventListener('pointerup', onPointerUp);

@@ -15,7 +15,7 @@ import { sfx } from './audio/sfx';
 import { haptics } from './audio/haptics';
 import { clearGameSnapshot, loadGameSnapshot, saveGameSnapshot } from './storage/gameState';
 import { loadBestScores, recordBestScore, type BestScores } from './storage/scores';
-import { dateToSeed, getDailyEntry, getDailyScore, recordDaily, todayDateStr } from './storage/daily';
+import { dateToSeed, getDailyEntry, getDailyScore, getDailyStreak, recordDaily, todayDateStr } from './storage/daily';
 import { buildShareText, shareText } from './game/share';
 import { codeToSeed } from './multiplayer/room';
 import { useMultiplayerRoom } from './multiplayer/useMultiplayerRoom';
@@ -61,6 +61,9 @@ export default function App() {
   // Transient — set when the user taps a slot that rejected the placement.
   // Drives the red shake/flash in Board3D. Cleared after the animation.
   const [lastInvalid, setLastInvalid] = useState<number | null>(null);
+  // Populated by Board3D; called by Inventory on drag-release to figure out
+  // which slot id is under the cursor (null if not over any slot).
+  const hitTestRef = useRef<((cx: number, cy: number) => number | null) | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [countdown, setCountdown] = useState(COUNTDOWN_START);
   // Brief "Time's up!" overlay between timer-hits-0 and the recap showing.
@@ -373,6 +376,22 @@ export default function App() {
     setTimeout(() => setLastInvalid(prev => (prev === id ? null : prev)), 380);
   }, []);
 
+  // Drag-to-drop placement: user drags an inventory ball, releases over a
+  // slot. We only need the placement branch (the slot might be occupied but
+  // drag-release never means "remove" — removal stays tap-only).
+  const handlePlaceFromDrag = useCallback((id: number, color: Color) => {
+    if (gameState !== 'playing') return;
+    if (inventory[color] <= 0) return;
+    if (board[id] !== null) { flagInvalid(id); return; }
+    if (!checkPlacementRules(id, board)) { flagInvalid(id); return; }
+    const nb = [...board]; nb[id] = color;
+    setBoard(nb);
+    setInventory(p => ({ ...p, [color]: p[color] - 1 }));
+    setSelectedColor(color); // keep the dragged color active for repeat taps
+    triggerPlaceFx(id);
+    sfx.place(SLOT_LAYER[id] as 0 | 1 | 2);
+  }, [gameState, board, inventory]);
+
   const handleSlotClick = useCallback((id: number) => {
     if (gameState !== 'playing') return;
     const current = board[id];
@@ -615,6 +634,7 @@ export default function App() {
 
     const today = todayDateStr();
     const dailyScore = getDailyScore(today);
+    const dailyStreak = getDailyStreak(today);
     const onShareDailyFromMenu = async () => {
       const entry = getDailyEntry(today);
       if (!entry) return;
@@ -631,6 +651,7 @@ export default function App() {
         settings={settings}
         onUpdateSetting={updateSetting}
         dailyScore={dailyScore}
+        dailyStreak={dailyStreak}
         onShareDaily={onShareDailyFromMenu}
         initialJoinCode={initialRoomCode}
         onCreateRoom={handleCreateRoom}
@@ -765,6 +786,7 @@ export default function App() {
             onSlotClick={handleSlotClick}
             lastPlaced={lastPlaced}
             lastInvalid={lastInvalid}
+            hitTestRef={hitTestRef}
           />
           {gameState === 'playing' && !selectedColor && board.every(s => s === null) && (
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-slate-900/85 text-white text-xs font-semibold px-3 py-1.5 rounded-full pointer-events-none">
@@ -812,6 +834,8 @@ export default function App() {
                 onSelect={setSelectedColor}
                 onFinishRound={endRound}
                 canFinish={gameState === 'playing'}
+                hitTestRef={hitTestRef}
+                onPlaceFromDrag={handlePlaceFromDrag}
               />
             </>
           )}
